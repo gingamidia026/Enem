@@ -9,6 +9,8 @@ const conexao = window.ENEM_PUBLICO || {};
 // A senha nunca é armazenada. O servidor mantém expiração e revogação.
 const chaveSessao = 'pu.sessao.v1';
 let sessao = '';
+let dispositivo = '';
+try { dispositivo=localStorage.getItem('pu.dispositivo.v1') || ''; } catch {}
 function guardarSessao(token) {
   sessao = token;
   try {
@@ -57,6 +59,7 @@ async function api(caminho, dados) {
     if(resposta.status===401){painel=null;guardarSessao('');simulado=null;login();}
     throw new Error(resultado.erro || 'Não foi possível concluir. Tente novamente.');
   }
+  if(resultado.dispositivo){dispositivo=resultado.dispositivo;try{localStorage.setItem('pu.dispositivo.v1',dispositivo);}catch{} delete resultado.dispositivo;}
   if(resultado.sessao){guardarSessao(resultado.sessao);delete resultado.sessao;}
   if(caminho==='/api/sair')guardarSessao('');
   return resultado;
@@ -89,11 +92,11 @@ function login() {
   document.querySelector('#acesso').onsubmit = async evento => {
     evento.preventDefault(); const form = evento.currentTarget; const botao = form.querySelector('button');
     botao.disabled = true; botao.setAttribute('aria-busy','true'); form.setAttribute('aria-busy','true'); document.querySelector('#erro-acesso').textContent=''; botao.textContent = cadastro ? 'Criando conta…' : 'Entrando…'; aviso.textContent = '';
-    try { const entrada = await api(cadastro ? '/api/cadastro' : '/api/entrar', Object.fromEntries(new FormData(form))); if(entrada.painel) mostrarPainel(entrada.painel); else await atualizar(); navegar(); } catch(e) { document.querySelector('#erro-acesso').textContent = mensagemErro(e); } finally { form.removeAttribute('aria-busy'); botao.removeAttribute('aria-busy'); botao.disabled = false; botao.textContent = cadastro ? 'Criar conta' : 'Entrar'; }
+    try { const entrada = await api(cadastro ? '/api/cadastro' : '/api/entrar', {...Object.fromEntries(new FormData(form)),dispositivo,nomeDispositivo:'Meu navegador'}); if(entrada.iniciando)tela('<p role="status">Estamos iniciando seu site personalizado. Por favor, aguarde.</p>'); if(entrada.painel) mostrarPainel(entrada.painel); else await atualizar(); if(entrada.iniciando && !publico && location.pathname!='/site/'){location.assign('/site/'+location.hash);return;} navegar(); } catch(e) { if(!document.querySelector('#erro-acesso'))login(); document.querySelector('#erro-acesso').textContent = mensagemErro(e); } finally { form.removeAttribute('aria-busy'); botao.removeAttribute('aria-busy'); botao.disabled = false; botao.textContent = cadastro ? 'Criar conta' : 'Entrar'; }
   };
 }
 function mostrarPainel(dados) { painel = dados; menu.hidden = false; document.body.classList.remove('sem-sessao'); }
-async function atualizar() { mostrarPainel(await api('/api/painel')); }
+async function atualizar() { if(!painel)tela('<p role="status">Estamos iniciando seu site personalizado. Por favor, aguarde.</p>'); mostrarPainel(await api('/api/painel')); }
 function indicadores() { const {total, acertos} = painel.progresso; return `<div class="indicadores"><div class="indicador"><strong>${total}</strong><span>respostas enviadas</span></div><div class="indicador"><strong>${acertos}</strong><span>acertos registrados</span></div><div class="indicador"><strong>${total ? Math.round(acertos / total * 100) + '%' : '—'}</strong><span>acerto nas tentativas</span>${total ? `<progress aria-label="Proporção de acertos nas tentativas" value="${acertos}" max="${total}"></progress>` : ''}</div></div>`; }
 function densidades() {
   const d=painel.densidade;
@@ -102,12 +105,21 @@ function densidades() {
 }
 function ligarDensidade(){const b=document.querySelector('#continuar-densidade');if(b)b.onclick=()=>{b.disabled=true;b.textContent='Carregando…';abrir(painel.densidade.proxima).catch(e=>{erro(e);b.disabled=false;b.textContent='Continuar densidade';});};}
 function perfilAluno(){const p=painel.perfil;if(!p)return '';return `<h2>Seu perfil de aprendizagem</h2><p>Veja os assuntos em que acertou menos e mais, junto da quantidade de tentativas. Esses percentuais mudam com suas respostas.</p>${p.assuntos.length?p.assuntos.map(a=>`<article class="linha"><div><h3>${escapar(a.materia)} · ${escapar(a.assunto)}</h3><p>${a.acertos} acertos e ${a.erros} erros em ${a.tentativas} tentativas (${a.percentual}%).</p><p>${a.media===null?'Comparação disponível quando houver respostas de pelo menos cinco usuários nesse assunto.':`Média dos usuários: ${a.media}%. Sua diferença: ${(a.percentual-a.media).toFixed(1)} pontos percentuais.`}</p></div></article>`).join(''):'<p>Responda uma questão para começar seu perfil.</p>'}<p>Média geral dos usuários: ${p.mediaGeral===null?'amostra insuficiente':p.mediaGeral+'%'}.</p><p class="secundario">Atualização semanal: ${escapar(p.atualizada.slice(0,10))}. ${escapar(p.periodo)} Questões retiradas do catálogo não entram na classificação por assunto; suas respostas continuam no histórico total. Esta comparação não é nota TRI.</p>`;}
+async function dispositivosPermitidos(){
+  tela('<p role="status">Carregando dispositivos…</p>');
+  try {
+    const dados=await api('/api/dispositivos');
+    tela('<h1>Dispositivos autorizados</h1><p>Um novo navegador é registrado após entrar com sua senha. Você pode manter até cinco dispositivos. Revogar encerra as sessões daquele dispositivo.</p>'+dados.dispositivos.map(d=>`<section><h2>${escapar(d.nome)}${d.atual?' (este dispositivo)':''}</h2><button data-revogar="${escapar(d.id)}">Revogar acesso</button></section>`).join(''));
+    document.querySelectorAll('[data-revogar]').forEach(b=>b.onclick=async()=>{b.disabled=true;try{await api('/api/dispositivos',{acao:'revogar',id:b.dataset.revogar});await atualizar();await dispositivosPermitidos();}catch(e){erro(e);b.disabled=false;}});
+  }catch(e){erro(e);}
+}
 function privacidade(){tela(`<h1>Seus dados e sua segurança</h1><h2>O que guardamos e para quê</h2><p>Nome, e-mail, senha protegida por hash, sessão e respostas com data. Usamos esses dados para acesso à conta, histórico, perfil de aprendizagem e comparação coletiva semanal. O perfil é calculado por matéria e assunto; não determina capacidade ou diagnóstico.</p><h2>Onde passam os dados</h2><p>O navegador conversa com uma conexão HTTPS intermediária. Pedidos e respostas passam temporariamente por uma fila; o conector do PC os leva ao servidor. Contas e histórico ficam no banco da instalação do PU. O PC precisa estar ligado.</p><h2>Proteção e compartilhamento</h2><p>O navegador não recebe banco, senhas protegidas, respostas de outros alunos ou gabaritos antes da correção. O servidor verifica a sessão em cada pedido. A comparação mostra apenas médias agregadas de grupos com pelo menos cinco usuários e exclui a conta de teste. Não há envio das respostas a modelos de IA nesta funcionalidade.</p><h2>Sessão e armazenamento</h2><p>A sessão dura até 30 dias e pode ser encerrada em Sair da conta. No acesso público, a credencial de sessão fica no armazenamento do navegador; evite dispositivos compartilhados. A conta de teste é compartilhada: use somente dados fictícios nela. O histórico fica guardado entre reinícios. Prazos definitivos de retenção, exclusão de cópias e canal de atendimento ainda precisam ser definidos pela administração.</p><h2>Crianças e adolescentes</h2><p>O tratamento deve respeitar o melhor interesse de crianças e adolescentes. A operação para esse público depende de definição da base legal, procedimento adequado à idade e comunicação com responsáveis quando aplicável. Esses procedimentos ainda estão em revisão: use somente dados de teste nesta versão.</p><h2>Seus direitos</h2><p>Você pode solicitar informações, acesso, correção e exclusão, observadas as condições legais. O canal específico e o responsável pelo tratamento ainda estão pendentes de definição. Esta página descreve o funcionamento atual e não certifica conformidade integral com a LGPD.</p><p><a href="https://www.gov.br/anpd/pt-br/assuntos/noticias/anpd-divulga-enunciado-sobre-o-tratamento-de-dados-pessoais-de-criancas-e-adolescentes" target="_blank" rel="noopener noreferrer">Orientação da ANPD sobre crianças e adolescentes</a></p><a class="botao" href="#inicio">Voltar ao estudo</a>`);}
 function navegar() {
   if(location.hash==='#privacidade') return privacidade();
   if (!painel) return login();
   simulado = null;
   const pagina = location.hash || '#inicio';
+  if(pagina==='#dispositivos')return dispositivosPermitidos();
   const oficial = painel.catalogo?.origem === 'cofre';
   const quantidadeSimulado = Math.min(10, painel.questoes.length);
   menu.querySelectorAll('a').forEach(a => { if(a.hash === pagina) a.setAttribute('aria-current','page'); else a.removeAttribute('aria-current'); });
@@ -194,7 +206,7 @@ if (publico) {
 // Navegar também quando o destino já é a seção selecionada.
 document.addEventListener('click', evento => {
   const link = evento.target.closest('a[href^="#"]');
-  if (link && ['#inicio','#questoes','#simulado','#nota','#progresso','#privacidade'].includes(link.hash) && link.hash === location.hash) { evento.preventDefault(); navegar(); }
+  if (link && ['#inicio','#questoes','#simulado','#nota','#progresso','#privacidade','#dispositivos'].includes(link.hash) && link.hash === location.hash) { evento.preventDefault(); navegar(); }
 });
 
 document.addEventListener('pointerdown',()=>{document.documentElement.dataset.entrada='ponteiro';});

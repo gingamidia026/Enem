@@ -13,8 +13,8 @@ CHAVE = ''
 ORIGEM = os.environ.get('ORIGEM', 'http://localhost:8088')
 
 def permitido(metodo, caminho):
-    return ((metodo == 'GET' and caminho in ['/api/configuracao', '/api/painel'])
-            or (metodo == 'POST' and caminho in ['/api/entrar', '/api/cadastro', '/api/sair'])
+    return ((metodo == 'GET' and caminho in ['/api/configuracao', '/api/painel', '/api/dispositivos'])
+            or (metodo == 'POST' and caminho in ['/api/entrar', '/api/cadastro', '/api/sair', '/api/dispositivos'])
             or (metodo in ['GET', 'POST'] and re.fullmatch(r'/api/questoes/[1-9][0-9]{0,5}', caminho)))
 
 def remoto(rota, dados):

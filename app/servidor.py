@@ -15,6 +15,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from questoes import QUESTOES, CATALOGO, ARQUIVO_CATALOGO
 import base64
+from ambientes import AmbienteIndisponivel, ATIVO as INDIVIDUAIS, solicitar as ambiente, painel_individual
 from acompanhamento import preparar, ciclo, avancar, perfil
 
 DADOS = Path(os.environ.get('DADOS', '/dados'))
@@ -51,6 +52,9 @@ with banco() as con:
     CREATE TABLE IF NOT EXISTS limites(chave TEXT PRIMARY KEY, inicio REAL NOT NULL, total INTEGER NOT NULL);
     ''')
 with banco() as con:
+    con.execute('CREATE TABLE IF NOT EXISTS dispositivos(id TEXT PRIMARY KEY, conta INTEGER REFERENCES contas(id), nome TEXT NOT NULL, criado REAL NOT NULL, ultimo REAL NOT NULL, revogado INTEGER NOT NULL DEFAULT 0)')
+    if 'dispositivo' not in [r[1] for r in con.execute('PRAGMA table_info(sessoes)')]:
+        con.execute('ALTER TABLE sessoes ADD COLUMN dispositivo TEXT')
     preparar(con)
 os.chmod(BANCO, 0o600)
 
@@ -136,9 +140,11 @@ class API(BaseHTTPRequestHandler):
     def painel(self, con, conta):
         totais = con.execute('SELECT COUNT(*) total,COALESCE(SUM(acerto),0) acertos FROM respostas WHERE conta=?', (conta['id'],)).fetchone()
         # Somente enunciados; gabarito e explicação continuam exclusivos da correção.
-        return {'densidade': ciclo(con, conta['id'], QUESTOES), 'perfil': perfil(con, conta['id'], QUESTOES), 'conta': conta, 'progresso': dict(totais), 'questoes': [
+        painel = {'densidade': ciclo(con, conta['id'], QUESTOES), 'perfil': perfil(con, conta['id'], QUESTOES), 'conta': conta, 'progresso': dict(totais), 'questoes': [
             {k: q[k] for k in (['id','area','titulo'] if q.get('oficial') else ['id', 'area', 'titulo', 'enunciado', 'alternativas'])} for q in QUESTOES],
             'catalogo': {'origem':'cofre','total':len(QUESTOES),'anuladas':CATALOGO['anuladas'],'revisar':CATALOGO['revisar'],'versao':CATALOGO['versao']} if CATALOGO is not None else {'origem':'demonstracao','total':len(QUESTOES)}}
+
+        return painel_individual(conta['id'], painel)
 
     def token(self):
         cookie = SimpleCookie()
@@ -149,6 +155,12 @@ class API(BaseHTTPRequestHandler):
             return ''
     def conta(self, con):
         conta = con.execute('SELECT c.id,c.nome FROM contas c JOIN sessoes s ON s.conta=c.id WHERE s.token=? AND s.expira>? AND (c.email!=? OR ?)', (digest(self.token()), time.time(), 'teste', PERFIL_TESTE)).fetchone()
+        sessao = con.execute('SELECT dispositivo FROM sessoes WHERE token=?',(digest(self.token()),)).fetchone()
+        if sessao and sessao['dispositivo']:
+            dispositivo=con.execute('SELECT revogado FROM dispositivos WHERE id=? AND conta=?',(sessao['dispositivo'],conta['id'] if conta else -1)).fetchone()
+            if not dispositivo or dispositivo['revogado']:conta=None
+        elif INDIVIDUAIS:
+            conta=None
         if not conta:
             raise Erro(401, 'Entre na sua conta para continuar.')
         return dict(conta)
@@ -167,6 +179,8 @@ class API(BaseHTTPRequestHandler):
             if erro.status in [401,403,413,429]:
                 self.registrar('solicitacao_recusada', erro.status)
             self.enviar(erro.status, {'erro': erro.mensagem})
+        except AmbienteIndisponivel:
+            self.enviar(503, {'erro':'Seu ambiente está indisponível no momento. Tente novamente em instantes.'})
         except (ValueError, TypeError, KeyError, UnicodeDecodeError):
             self.enviar(400, {'erro': 'Dados inválidos. Confira os campos.'})
         except Exception:
@@ -178,6 +192,8 @@ class API(BaseHTTPRequestHandler):
         self.executar('POST')
     def rota(self, metodo):
         caminho = self.path.split('?')[0]
+        if caminho.startswith('/api/') and '?' in self.path:
+            raise Erro(400, 'Parâmetros de consulta não permitidos.')
         if metodo == 'GET' and caminho in ['/', '/app.js', '/simulador.js', '/estilo.css', '/textura.svg']:
             arquivo = PUBLICO / {'/': 'index.html', '/app.js': 'app.js', '/simulador.js': 'simulador.js', '/estilo.css': 'estilo.css', '/textura.svg': 'textura.svg'}[caminho]
             tipo = {'/': 'text/html; charset=utf-8', '/app.js': 'text/javascript; charset=utf-8', '/simulador.js': 'text/javascript; charset=utf-8', '/estilo.css': 'text/css; charset=utf-8', '/textura.svg': 'image/svg+xml'}[caminho]
@@ -198,6 +214,9 @@ class API(BaseHTTPRequestHandler):
             dados = json.loads(self.rfile.read(tamanho))
             if not isinstance(dados, dict):
                 raise Erro(400, 'Envie um objeto JSON.')
+            # A identidade vem exclusivamente da sessão, nunca do pedido.
+            if any(campo in dados for campo in ['conta', 'conta_id', 'usuario', 'usuario_id', 'dono', 'caminho', 'arquivo']):
+                raise Erro(400, 'Este pedido contém campos não permitidos.')
         with banco() as con:
             if metodo == 'POST' and caminho in ['/api/cadastro', '/api/entrar']:
                 cliente = self.cliente()
@@ -234,15 +253,46 @@ class API(BaseHTTPRequestHandler):
                     raise Erro(401, 'E-mail ou senha incorretos.')
                 if legado:
                     con.execute('UPDATE contas SET senha=? WHERE id=?', (resumo(senha, sal), conta['id']))
+                identificador=dados.get('dispositivo','')
+                if not isinstance(identificador,str) or (identificador and not re.fullmatch(r'[A-Za-z0-9_-]{32,100}',identificador)):
+                    raise Erro(400,'Identificação do dispositivo inválida.')
+                identificador=identificador or secrets.token_urlsafe(32)
+                id_dispositivo=digest(str(conta['id'])+':'+identificador)
+                registrado=con.execute('SELECT revogado FROM dispositivos WHERE id=? AND conta=?',(id_dispositivo,conta['id'])).fetchone()
+                if registrado and registrado['revogado']:
+                    raise Erro(403,'Este dispositivo foi revogado. Use outro dispositivo autorizado.')
+                if not registrado:
+                    if con.execute('SELECT COUNT(*) FROM dispositivos WHERE conta=? AND revogado=0',(conta['id'],)).fetchone()[0]>=5:
+                        raise Erro(403,'Limite de cinco dispositivos. Revogue um dispositivo antes de adicionar outro.')
+                    nome_dispositivo=dados.get('nomeDispositivo','Navegador')
+                    if not isinstance(nome_dispositivo,str) or not 1<=len(nome_dispositivo)<=60:raise Erro(400,'Nome do dispositivo inválido.')
+                    con.execute('INSERT INTO dispositivos(id,conta,nome,criado,ultimo) VALUES(?,?,?,?,?)',(id_dispositivo,conta['id'],nome_dispositivo,time.time(),time.time()))
+                else:con.execute('UPDATE dispositivos SET ultimo=? WHERE id=?',(time.time(),id_dispositivo))
                 token = secrets.token_urlsafe(32)
                 con.execute('DELETE FROM sessoes WHERE expira<? OR token=?', (time.time(), digest(self.token())))
-                con.execute('INSERT INTO sessoes VALUES(?,?,?)', (digest(token), conta['id'], time.time() + 30 * 86400))
+                con.execute('INSERT INTO sessoes(token,conta,expira,dispositivo) VALUES(?,?,?,?)', (digest(token), conta['id'], time.time() + 30 * 86400,id_dispositivo))
                 con.execute('DELETE FROM sessoes WHERE conta=? AND token NOT IN (SELECT token FROM sessoes WHERE conta=? ORDER BY expira DESC LIMIT 5)', (conta['id'], conta['id']))
                 con.commit()
                 self.registrar('entrada_aceita', 200)
                 cookie = f'{COOKIE}={token}; HttpOnly; SameSite=Strict; Path=/; Max-Age=2592000' + ('; Secure' if SEGURO else '')
-                return self.enviar(200, {'nome': conta['nome'], 'painel': self.painel(con, {'id': conta['id'], 'nome': conta['nome']})}, cookie=cookie)
+                return self.enviar(200, ({'nome': conta['nome'], 'iniciando':True, 'dispositivo':identificador} if INDIVIDUAIS else {'nome': conta['nome'], 'dispositivo':identificador, 'painel': self.painel(con, {'id': conta['id'], 'nome': conta['nome']})}), cookie=cookie)
             conta = self.conta(con)
+            if INDIVIDUAIS and metodo=='GET' and caminho.startswith('/site/'):
+                recurso=caminho[len('/site'):]
+                if recurso not in ['/','/app.js','/simulador.js','/estilo.css','/textura.svg']:raise Erro(404,'Página não encontrada.')
+                resposta=ambiente(conta['id'],'site',caminho=recurso)
+                return self.enviar(200,base64.b64decode(resposta['corpo']),resposta['tipo'])
+            if caminho == '/api/dispositivos':
+                if metodo=='GET':
+                    atual=con.execute('SELECT dispositivo FROM sessoes WHERE token=?',(digest(self.token()),)).fetchone()[0]
+                    return self.enviar(200,{'dispositivos':[dict(r,atual=r['id']==atual) for r in con.execute('SELECT id,nome,ultimo FROM dispositivos WHERE conta=? AND revogado=0',(conta['id'],))]})
+                alvo=dados.get('id')
+                if dados.get('acao')!='revogar' or not isinstance(alvo,str):raise Erro(400,'Dispositivo inválido.')
+                if not con.execute('SELECT 1 FROM dispositivos WHERE conta=? AND id=? AND revogado=0',(conta['id'],alvo)).fetchone():raise Erro(404,'Dispositivo não encontrado.')
+                con.execute('UPDATE dispositivos SET revogado=1 WHERE conta=? AND id=?',(conta['id'],alvo))
+                con.execute('DELETE FROM sessoes WHERE conta=? AND dispositivo=?',(conta['id'],alvo))
+                con.commit()
+                return self.enviar(200,{'ok':True})
             if metodo == 'POST' and caminho == '/api/sair':
                 con.execute('DELETE FROM sessoes WHERE token=?', (digest(self.token()),))
                 con.commit()
@@ -251,6 +301,7 @@ class API(BaseHTTPRequestHandler):
                 return self.enviar(200, self.painel(con, conta))
             partes = re.fullmatch(r'/api/questoes/([0-9]+)', caminho)
             if partes:
+                if INDIVIDUAIS:ambiente(conta['id'])
                 questao = next((q for q in QUESTOES if q['id'] == int(partes[1])), None)
                 if not questao:
                     raise Erro(404, 'Questão não encontrada.')
@@ -301,4 +352,4 @@ class API(BaseHTTPRequestHandler):
             raise Erro(404, 'Página não encontrada.')
 
 if __name__ == '__main__':
-    Servidor(('0.0.0.0', int(os.environ.get('PORTA', '8000'))), API).serve_forever()
+    Servidor((os.environ.get('ESCUTA','0.0.0.0'), int(os.environ.get('PORTA', '8000'))), API).serve_forever()

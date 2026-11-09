@@ -169,8 +169,10 @@ class Seguranca(unittest.TestCase):
             self.assertNotIn('sessao',dados)
             tokens.append(cookie.split(';')[0])
         self.assertEqual(self.requisicao(cliente,'/api/painel')[0],401)
-        self.assertEqual(self.requisicao(cliente,'/api/questoes/1',{'alternativa':2,'conta':2},cookie=tokens[0])[0],200)
-        self.assertEqual(self.requisicao(cliente,'/api/painel?conta=1',cookie=tokens[1])[1]['progresso']['total'],0)
+        self.assertEqual(self.requisicao(cliente,'/api/questoes/1',{'alternativa':2,'conta':2},cookie=tokens[0])[0],400)
+        self.assertEqual(self.requisicao(cliente,'/api/questoes/1',{'alternativa':2},cookie=tokens[0])[0],200)
+        self.assertEqual(self.requisicao(cliente,'/api/painel?conta=1',cookie=tokens[1])[0],400)
+        self.assertEqual(self.requisicao(cliente,'/api/painel',cookie=tokens[1])[1]['progresso']['total'],0)
         self.assertEqual(self.requisicao(cliente,'/api/painel',cookie=tokens[0])[1]['progresso']['total'],1)
         self.assertEqual(self.requisicao(cliente,'/api/painel',cookie='__Host-sessao=inventada')[0],401)
         # Em produção, o nome de cookie local não concede sessão.
@@ -180,6 +182,18 @@ class Seguranca(unittest.TestCase):
         with closing(sqlite3.connect(Path(self.pasta.name)/'estudos.sqlite3')) as con, con:
             con.execute('UPDATE sessoes SET expira=0')
         self.assertEqual(self.requisicao(cliente,'/api/painel',cookie=tokens[1])[0],401)
+
+    def test_arquivos_internos_e_rotas_sem_sessao(self):
+        cliente = self.cliente()
+        for caminho in ['/api/painel', '/api/questoes/1']:
+            self.assertEqual(self.requisicao(cliente, caminho)[0], 401)
+        self.assertEqual(self.requisicao(cliente, '/api/questoes/1', {'acao':'imagem','indice':0,'parte':0})[0],401)
+        for caminho in ['/dados/estudos.sqlite3','/catalogo/atual.json','/.segredos/conector','/etc/passwd','/../dados/estudos.sqlite3','/%2e%2e/dados/estudos.sqlite3']:
+            status, corpo, _ = self.requisicao(cliente, caminho)
+            self.assertIn(status, [401,404])
+            self.assertNotIn('SQLite', str(corpo))
+        status, corpo, _ = self.requisicao(cliente, '/api/entrar', {'email':'teste','senha':'123'})
+        self.assertNotEqual(status,200)
 
     def test_abuso_nao_bloqueia_outro_ip(self):
         cliente = self.cliente()

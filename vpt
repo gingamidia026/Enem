@@ -21,11 +21,12 @@ case "${1:-ligar}" in
       systemctl --user start docker.service
     fi
     python3 "$PASTA_VPT/scripts/sincronizar-questoes.py"
+    docker build -f ambiente/Dockerfile -t pu-individual:local .
+    python3 "$PASTA_VPT/gerenciador/iniciar.py"
     compor up -d --build --wait --force-recreate
     echo 'Pé na Universidade (PU) ligado: http://localhost:8088'
-    echo 'Perfil de teste: login teste · senha 123'
     ;;
-  parar|desligar) compor stop; echo 'Pé na Universidade (PU) parado. Dados preservados.' ;;
+  parar|desligar) compor stop; python3 "$PASTA_VPT/gerenciador/parar.py"; echo 'Pé na Universidade (PU) parado. Dados preservados.' ;;
   status) compor ps -a ;;
   logs) compor logs -f --tail 50 ;;
   ajuda|-h|--help) echo 'pu [ligar|parar|reiniciar|status|logs|ajuda]' ;;

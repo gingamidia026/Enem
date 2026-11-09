@@ -1,8 +1,8 @@
 const ORIGENS = new Set(['https://pu.gingamidia.com', 'https://gingamidia026.github.io']);
 const agora = () => Math.floor(Date.now()/1000);
 const permitido = (metodo,caminho) =>
-  (metodo==='GET' && ['/api/configuracao','/api/painel'].includes(caminho)) ||
-  (metodo==='POST' && ['/api/entrar','/api/cadastro','/api/sair'].includes(caminho)) ||
+  (metodo==='GET' && ['/api/configuracao','/api/painel','/api/dispositivos'].includes(caminho)) ||
+  (metodo==='POST' && ['/api/entrar','/api/cadastro','/api/sair','/api/dispositivos'].includes(caminho)) ||
   (['GET','POST'].includes(metodo) && /^\/api\/questoes\/[1-9][0-9]{0,5}$/.test(caminho));
 async function hash(valor) { return Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(valor)))).map(x=>x.toString(16).padStart(2,'0')).join(''); }
 async function jsonPequeno(request,limite=20000) {
