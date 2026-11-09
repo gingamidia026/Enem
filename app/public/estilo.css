@@ -1,5 +1,5 @@
 :root {
-  --fundo: #F7F6F3; --painel: #FFFFFF; --texto: #2F3437; --secundario: #6B6A67;
+  --fundo: #FFFFFF; --painel: #FFFFFF; --texto: #2F3437; --secundario: #6B6A67;
   --linha: #EAEAEA; --suave: #F9F9F8; --destaque: #111111; --foco: #346538;
   --altura-cabecalho: 4.5rem;
   --curva: cubic-bezier(.23,1,.32,1);
@@ -133,19 +133,19 @@ progress::-moz-progress-bar { background: var(--destaque); }
 
 /* Direcao editorial do VpT. */
 main { max-width: 1024px; }
-body { background-image: url("textura.svg"); }
+body { background-image: none; }
 button,.botao { border: 1px solid transparent; }
 .discreto { border: 1px solid var(--linha); }
 .etiqueta { background: #FBF3DB; color: #956400; border-radius: 9999px; padding: 6px 12px; font-size: .6875rem; text-transform: uppercase; letter-spacing: .05em; }
 .simbolo svg { stroke-width: 2; }
 h2 { font-family: "Iowan Old Style", "Palatino Linotype", "Book Antiqua", Palatino, serif; font-weight: 400; font-size: 1.65rem; }
 .formulario { position: relative; }
-.formulario::before { content: ""; display: block; width: 42px; height: 5px; background: #EDF3EC; margin-bottom: 28px; }
+.formulario { border: 0; background: transparent; }
 .indicadores { grid-template-columns: 1.25fr 1fr 1fr; gap: 16px; border: 0; background: transparent; overflow: visible; margin: 48px 0; }
-.indicador { border: 1px solid var(--linha); border-radius: 8px; padding: 28px 24px; }
-.indicador:first-child { background: #F9F9F8; }
+.indicador { border: 0; border-left: 1px solid var(--linha); border-radius: 0; padding: 8px 24px; }
+.indicador:first-child { background: transparent; border-left: 0; padding-left: 0; }
 .indicador strong { font-family: "Iowan Old Style", "Palatino Linotype", "Book Antiqua", Palatino, serif; font-weight: 400; font-size: 2.75rem; }
-.nota { border: 1px solid var(--linha); background: #F9F9F8; padding: 20px 24px; }
+.nota { border: 0; border-left: 2px solid var(--linha); border-radius: 0; background: transparent; padding: 4px 16px; }
 .alternativa { border: 1px solid var(--linha); }
 .alternativa:has(input:checked) { background: #FBF3DB; }
 .alternativa[data-correcao=correta] { background: #EDF3EC; }
@@ -175,3 +175,32 @@ body.sem-sessao { min-height: 100svh; display: flex; flex-direction: column; }
 .sem-sessao .acesso { margin: 0 auto; }
 .sem-sessao #aviso:empty { display: none; }
 .sem-sessao #aviso { margin-inline: auto; }
+
+/* PU: interface silenciosa; papel reservado à resolução de questões. */
+header { background: var(--painel); }
+.etiqueta { background: transparent; color: var(--secundario); padding: 0; text-transform: none; letter-spacing: 0; font-size: .8125rem; }
+nav { border-right: 0; }
+nav a { border-radius: 0; }
+nav a[aria-current=page] { background: transparent; color: var(--texto); box-shadow: inset 2px 0 var(--texto); }
+.discreto { background: transparent; }
+.revelar { animation: none; }
+input,select { border-color: #858480; background: var(--painel); }
+.questao { max-width: 720px; padding: clamp(20px,4vw,48px); border: 1px solid #858480; border-radius: 2px; background: #FBFBFA url("textura.svg"); }
+.cabecalho-prova { display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; border-bottom: 2px solid var(--texto); padding-bottom: 16px; margin-bottom: 24px; font-size: .8125rem; }
+.cabecalho-prova strong { font-weight: 600; }
+.cabecalho-prova span { color: var(--secundario); }
+.questao > .dados-questao { font-size: .8125rem; color: var(--secundario); margin: 0 0 12px; }
+.questao h1 { font-size: clamp(1.8rem,3vw,2.6rem); line-height: 1.2; text-wrap: initial; }
+.questao > .enunciado { margin: 24px 0 32px; line-height: 1.8; }
+.questao .alternativa { background: transparent; border: 1px solid transparent; border-bottom-color: var(--linha); border-radius: 0; padding: 14px 8px; margin: 0; }
+.questao .alternativa:has(input:checked) { background: #FBF3DB; border-color: #956400; }
+.questao .alternativa[data-correcao=correta] { background: #EDF3EC; border-color: #346538; }
+.questao .resultado { background: transparent; border: 0; border-top: 1px solid #858480; border-radius: 0; padding: 24px 0 0; }
+@media(max-width:800px) {
+ nav { background: var(--painel); }
+ .questao { padding: 24px 18px; }
+ .indicador { padding: 8px 12px; }
+}
+@media(max-width:380px) { .indicador { border-left: 0; padding-left: 0; } }
+@media(prefers-contrast:more) { .questao { background-image: none; border-color: currentColor; } }
+@media(forced-colors:active) { .questao { background-image: none; } .questao .alternativa { border: 1px solid ButtonText; } }
