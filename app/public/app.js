@@ -42,7 +42,24 @@ async function api(caminho, dados) {
   return resultado;
 }
 function erro(e) { aviso.textContent = e.message || 'Falha de conexão. Tente novamente.'; }
-function tela(html) { aviso.textContent = ''; conteudo.innerHTML = html; }
+const observadorEntrada = 'IntersectionObserver' in window ? new IntersectionObserver(entradas => {
+  entradas.forEach(entrada => {
+    if (entrada.isIntersecting) {
+      entrada.target.classList.add('revelar');
+      observadorEntrada.unobserve(entrada.target);
+    }
+  });
+}, {threshold: 0.05}) : null;
+function tela(html) {
+  if (observadorEntrada) observadorEntrada.disconnect();
+  aviso.textContent = ''; conteudo.innerHTML = html;
+  if (observadorEntrada && !window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+    [...conteudo.children].forEach((bloco, indice) => {
+      bloco.style.setProperty('--atraso', `${Math.min(indice, 4) * 80}ms`);
+      observadorEntrada.observe(bloco);
+    });
+  }
+}
 function login() {
   menu.hidden = true;
   tela(`<div class="acesso"><section class="formulario"><h1>${cadastro ? 'Crie seu espaço' : 'Entre para estudar'}</h1><p>Continue seus estudos, no seu ritmo.</p>${publico && !conexao.habilitado ? '<p class="nota" role="status">O acesso público está em configuração. Ainda não é possível entrar.</p>' : ''}<form id="acesso">${cadastro ? '<label for="nome">Como você se chama?</label><input id="nome" name="nome" autocomplete="name" minlength="2" maxlength="80" required>' : ''}<label for="email">${cadastro ? 'E-mail' : 'Login'}</label><input id="email" name="email" type="${cadastro ? 'email' : 'text'}" autocomplete="username" maxlength="232" spellcheck="false" required><label for="senha">Senha</label><input id="senha" name="senha" type="password" autocomplete="${cadastro ? 'new-password' : 'current-password'}" minlength="${cadastro ? 12 : 1}" maxlength="128" required><small>${cadastro ? 'Use de 12 a 128 caracteres.' : 'Digite sua senha para entrar.'}</small><button type="submit" ${publico && !conexao.habilitado ? 'disabled' : ''}>${cadastro ? 'Criar conta' : 'Entrar'}</button><p id="erro-acesso" class="erro-campo" role="alert"></p></form>${!cadastro && perfilTeste ? '<p class="nota">Perfil de teste: login <strong>teste</strong> e senha <strong>123</strong>.</p>' : ''}<button class="discreto troca" id="trocar">${cadastro ? 'Já tenho uma conta' : 'Quero criar uma conta'}</button><p class="privacidade"><small>Guardamos seu nome, e-mail e respostas para mostrar seu progresso. Use dados de teste nesta versão inicial.</small></p></section></div>`);
