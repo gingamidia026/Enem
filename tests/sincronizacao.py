@@ -79,6 +79,9 @@ E quinta alternativa
  def test_reinicio_automatico_com_docker_simulado(self):
   projeto=self.raiz/'projeto';(projeto/'scripts').mkdir(parents=True)
   shutil.copy(RAIZ/'vpt',projeto/'vpt');shutil.copy(RAIZ/'scripts/sincronizar-questoes.py',projeto/'scripts')
+  # Este teste isola a sincronização; o gerenciador real tem teste Docker próprio.
+  (projeto/'gerenciador').mkdir()
+  (projeto/'gerenciador/iniciar.py').write_text("print('Gerenciador simulado para teste de sincronização.')\n")
   fake=self.raiz/'bin';fake.mkdir();docker=fake/'docker';docker.write_text('#!/bin/sh\nprintf "%s\\n" "$*" >> "$PU_LOG_TESTE"\n');docker.chmod(0o755)
   registro=self.raiz/'docker.log';ambiente={**os.environ,'PATH':str(fake)+':'+os.environ['PATH'],'DOCKER_HOST':'fixture','PU_COFRE_VESTIBULAR':str(self.cofre),'PU_LOG_TESTE':str(registro)}
   subprocess.run(['bash',str(projeto/'vpt'),'reiniciar'],check=True,env=ambiente,stdout=subprocess.DEVNULL)
