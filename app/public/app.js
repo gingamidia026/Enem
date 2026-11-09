@@ -4,6 +4,7 @@ const aviso = document.querySelector('#aviso');
 const menu = document.querySelector('#menu');
 let painel = null;
 let cadastro = false;
+let perfilTeste = false;
 let simulado = null;
 const escapar = valor => String(valor).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 async function api(caminho, dados) {
@@ -19,7 +20,7 @@ function erro(e) { aviso.textContent = e.message || 'Falha de conexão. Tente no
 function tela(html) { aviso.textContent = ''; conteudo.innerHTML = html; }
 function login() {
   menu.hidden = true;
-  tela(`<div class="abertura"><section><p>Seu próximo passo começa aqui.</p><h1>Um espaço para estudar. Uma questão de cada vez.</h1><p>Pratique por área, entenda as respostas e acompanhe o que você já fez.</p><div class="nota">Esta primeira versão traz quatro questões demonstrativas para experimentar o funcionamento.</div></section><section class="formulario"><h2>${cadastro ? 'Crie seu espaço' : 'Entre para estudar'}</h2><form id="acesso">${cadastro ? '<label for="nome">Como você se chama?</label><input id="nome" name="nome" autocomplete="name" minlength="2" maxlength="80" required>' : ''}<label for="email">E-mail</label><input id="email" name="email" type="email" autocomplete="username" maxlength="232" spellcheck="false" required><label for="senha">Senha</label><input id="senha" name="senha" type="password" autocomplete="${cadastro ? 'new-password' : 'current-password'}" minlength="12" maxlength="128" required><small>Use de 12 a 128 caracteres.</small><button type="submit">${cadastro ? 'Criar conta' : 'Entrar'}</button></form><button class="discreto troca" id="trocar">${cadastro ? 'Já tenho uma conta' : 'Quero criar uma conta'}</button><p><small>Guardamos seu nome, e-mail e respostas para mostrar seu progresso. Use dados de teste nesta versão inicial.</small></p></section></div>`);
+  tela(`<div class="acesso"><section class="formulario"><h1>${cadastro ? 'Crie seu espaço' : 'Entre para estudar'}</h1><p>Questões, simulado e seu progresso em um só lugar.</p><form id="acesso">${cadastro ? '<label for="nome">Como você se chama?</label><input id="nome" name="nome" autocomplete="name" minlength="2" maxlength="80" required>' : ''}<label for="email">${cadastro ? 'E-mail' : 'Login'}</label><input id="email" name="email" type="${cadastro ? 'email' : 'text'}" autocomplete="username" maxlength="232" spellcheck="false" required><label for="senha">Senha</label><input id="senha" name="senha" type="password" autocomplete="${cadastro ? 'new-password' : 'current-password'}" minlength="${cadastro ? 12 : 1}" maxlength="128" required><small>${cadastro ? 'Use de 12 a 128 caracteres.' : 'Digite sua senha para entrar.'}</small><button type="submit">${cadastro ? 'Criar conta' : 'Entrar'}</button></form>${!cadastro && perfilTeste ? '<p class="nota">Perfil de teste: login <strong>teste</strong> e senha <strong>123</strong>.</p>' : ''}<button class="discreto troca" id="trocar">${cadastro ? 'Já tenho uma conta' : 'Quero criar uma conta'}</button><p><small>Guardamos seu nome, e-mail e respostas para mostrar seu progresso. Use dados de teste nesta versão inicial.</small></p></section></div>`);
   document.querySelector('#trocar').onclick = () => { cadastro = !cadastro; login(); };
   document.querySelector('#acesso').onsubmit = async evento => {
     evento.preventDefault(); const form = evento.currentTarget; const botao = form.querySelector('button');
@@ -69,7 +70,7 @@ async function abrir(id) {
 }
 document.querySelector('#sair').onclick=async()=>{try {await api('/api/sair',{}); painel=null;simulado=null;login();}catch(e){erro(e);}};
 window.addEventListener('hashchange',navegar);
-atualizar().then(navegar).catch(e=>{login(); if(!e.message.includes('Entre na sua conta'))erro(e);});
+api('/api/configuracao').then(config => { perfilTeste = config.perfilTeste; return atualizar(); }).then(navegar).catch(e=>{login(); if(!e.message.includes('Entre na sua conta'))erro(e);});
 // Navegar também quando o destino já é a seção selecionada.
 document.addEventListener('click', evento => {
   const link = evento.target.closest('a[href^="#"]');

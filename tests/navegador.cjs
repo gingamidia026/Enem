@@ -6,6 +6,18 @@ const path=require('node:path');
  const page=await browser.newPage({viewport:{width:1100,height:900}});
  const erros=[]; page.on('pageerror',e=>erros.push(e.message));
  await page.goto('http://localhost:8088');
+ await page.getByText('Perfil de teste:',{exact:false}).waitFor();
+ for(const largura of [320,390,768,1440]) {
+   await page.setViewportSize({width:largura,height:900});
+   assert(await page.locator('html').evaluate(e=>e.scrollWidth<=e.clientWidth));
+   if(largura===390) await page.screenshot({path:path.join(__dirname,'../docs/tela-login-390.png'),fullPage:true});
+ }
+ await page.getByLabel('Login',{exact:true}).fill('teste');
+ await page.getByLabel('Senha',{exact:true}).fill('123');
+ await page.getByRole('button',{name:'Entrar',exact:true}).click();
+ await page.getByRole('heading',{name:'Vamos dar o próximo passo?'}).waitFor();
+ await page.getByText('Olá, Teste.',{exact:true}).waitFor();
+ await page.getByRole('button',{name:'Sair da conta'}).click();
  await page.getByRole('button',{name:'Quero criar uma conta'}).click();
  await page.getByLabel('Como você se chama?').fill('Estudante de teste');
  await page.getByLabel('E-mail',{exact:true}).fill(`teste${Date.now()}@example.com`);
@@ -41,6 +53,6 @@ const path=require('node:path');
  await page.getByRole('button',{name:'Sair da conta'}).click();
  await page.getByRole('heading',{name:'Entre para estudar'}).waitFor();
  assert.deepEqual(erros,[]);
- console.log('OK: cadastro, treino, retorno à lista, simulado, progresso, saída, console e 6 larguras de viewport.');
+ console.log('OK: login teste/123, tela de login responsiva, cadastro, treino, retorno à lista, simulado, progresso, saída, console e 6 larguras de viewport.');
  await browser.close();
 })().catch(e=>{console.error(e);process.exit(1)});

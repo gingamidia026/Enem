@@ -1,0 +1,29 @@
+#!/usr/bin/env bash
+# Dominique-Oliveira-ChatGPT🤖💚 — controla somente o projeto Docker ENEM.
+set -euo pipefail
+PASTA_ENEM="$(cd -- "$(dirname -- "$(readlink -f -- "${BASH_SOURCE[0]}")")" && pwd)"
+cd "$PASTA_ENEM"
+if ! command -v docker >/dev/null 2>&1; then
+  echo 'Docker não encontrado no PATH.' >&2; exit 1
+fi
+# Usa o Docker rootless já existente quando nenhuma configuração foi fornecida.
+if [[ -z "${DOCKER_HOST:-}" && -z "${DOCKER_CONTEXT:-}" && -S "/run/user/$(id -u)/docker.sock" ]]; then
+  export DOCKER_HOST="unix:///run/user/$(id -u)/docker.sock"
+fi
+compor() { docker compose -f "$PASTA_ENEM/compose.yaml" "$@"; }
+case "${1:-ligar}" in
+  ligar|iniciar)
+    if ! docker info >/dev/null 2>&1; then
+      systemctl --user start docker.service
+    fi
+    compor up -d --build --wait
+    echo 'ENEM ligado: http://localhost:8088'
+    echo 'Perfil de teste: login teste · senha 123'
+    ;;
+  parar|desligar) compor stop; echo 'ENEM parado. Dados preservados.' ;;
+  reiniciar) compor restart; compor up -d --wait; echo 'ENEM reiniciado.' ;;
+  status) compor ps -a ;;
+  logs) compor logs -f --tail 50 ;;
+  ajuda|-h|--help) echo 'enem [ligar|parar|reiniciar|status|logs|ajuda]' ;;
+  *) echo 'Comando desconhecido. Use: enem ajuda' >&2; exit 2 ;;
+esac

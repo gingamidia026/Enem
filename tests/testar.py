@@ -20,10 +20,11 @@ class Testes(unittest.TestCase):
             s.bind(('127.0.0.1', 0))
             porta = s.getsockname()[1]
         cls.origem = f'http://127.0.0.1:{porta}'
-        cls.processo = subprocess.Popen(['python3', str(RAIZ/'app/servidor.py')], env={**os.environ, 'DADOS':cls.pasta.name, 'PORTA':str(porta), 'ORIGEM':cls.origem})
+        cls.processo = subprocess.Popen(['python3', str(RAIZ/'app/servidor.py')], env={**os.environ, 'DADOS':cls.pasta.name, 'PORTA':str(porta), 'ORIGEM':cls.origem, 'PERFIL_TESTE':getattr(cls,'perfil','0')})
         for _ in range(100):
             try:
-                urllib.request.urlopen(cls.origem+'/api/saude', timeout=1)
+                with urllib.request.urlopen(cls.origem+'/api/saude', timeout=1):
+                    pass
                 break
             except OSError:
                 time.sleep(.05)
@@ -41,7 +42,8 @@ class Testes(unittest.TestCase):
             resposta=cliente.open(req)
         except urllib.error.HTTPError as e:
             resposta=e
-        return resposta.status, json.loads(resposta.read()), resposta.headers
+        with resposta:
+            return resposta.status, json.loads(resposta.read()), resposta.headers
     def cadastrar(self, cliente, nome):
         status,dados,cabecalhos=self.pedido(cliente,'/api/cadastro',{'nome':nome,'email':nome+'@example.com','senha':'Senha longa de teste 123!'})
         self.assertEqual(status,200,dados)
@@ -78,6 +80,37 @@ class Testes(unittest.TestCase):
         for _ in range(10):
             self.assertEqual(self.pedido(a,'/api/entrar',{'email':'inexistente@example.com','senha':'Senha longa de teste 123!'})[0],401)
         self.assertEqual(self.pedido(a,'/api/entrar',{'email':'inexistente@example.com','senha':'Senha longa de teste 123!'})[0],429)
+
+class PerfilTeste(unittest.TestCase):
+    perfil = '1'
+    setUpClass = classmethod(Testes.setUpClass.__func__)
+    tearDownClass = classmethod(Testes.tearDownClass.__func__)
+    cliente = Testes.cliente
+    pedido = Testes.pedido
+    def test_login_teste_e_persistencia(self):
+        cliente = self.cliente()
+        self.assertTrue(self.pedido(cliente, '/api/configuracao')[1]['perfilTeste'])
+        self.assertEqual(self.pedido(cliente, '/api/entrar', {'email':'teste','senha':'errada'})[0], 401)
+        self.assertEqual(self.pedido(cliente, '/api/entrar', {'email':'teste','senha':'123'})[0], 200)
+        self.assertEqual(self.pedido(cliente, '/api/painel')[1]['conta']['nome'], 'Teste')
+        self.assertEqual(self.pedido(cliente, '/api/questoes/1', {'alternativa':2})[0], 200)
+        self.processo.terminate(); self.processo.wait()
+        self.__class__.processo = subprocess.Popen(['python3', str(RAIZ/'app/servidor.py')], env={**os.environ, 'DADOS':self.pasta.name, 'PORTA':self.origem.rsplit(':',1)[1], 'ORIGEM':self.origem, 'PERFIL_TESTE':'0'})
+        for _ in range(100):
+            try:
+                with urllib.request.urlopen(self.origem+'/api/saude', timeout=1):
+                    pass
+                break
+            except OSError:
+                time.sleep(.05)
+        self.assertFalse(self.pedido(cliente, '/api/configuracao')[1]['perfilTeste'])
+        self.assertEqual(self.pedido(cliente, '/api/painel')[0], 401)
+        self.assertNotEqual(self.pedido(cliente, '/api/entrar', {'email':'teste','senha':'123'})[0], 200)
+        # O banco e o histórico permanecem presentes após desativar o perfil.
+        import sqlite3
+        with sqlite3.connect(Path(self.pasta.name)/'estudos.sqlite3') as con:
+            self.assertEqual(con.execute('SELECT COUNT(*) FROM respostas').fetchone()[0], 1)
+        con.close()
 
 if __name__=='__main__':
     unittest.main(verbosity=2)

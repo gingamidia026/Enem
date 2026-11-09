@@ -8,6 +8,7 @@ import secrets
 import sqlite3
 import threading
 import time
+from contextlib import contextmanager
 from http.cookies import SimpleCookie
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -18,14 +19,20 @@ DADOS.mkdir(parents=True, exist_ok=True)
 os.chmod(DADOS, 0o700)
 BANCO = DADOS / 'estudos.sqlite3'
 ORIGEM = os.environ.get('ORIGEM', 'http://localhost:8088')
+PERFIL_TESTE = os.environ.get('PERFIL_TESTE', '0') == '1'
 SEGURO = os.environ.get('COOKIE_SEGURO', '0') == '1'
 PUBLICO = Path(__file__).parent / 'public'
 
+@contextmanager
 def banco():
     con = sqlite3.connect(BANCO, timeout=15)
     con.row_factory = sqlite3.Row
     con.execute('PRAGMA foreign_keys=ON')
-    return con
+    try:
+        with con:
+            yield con
+    finally:
+        con.close()
 
 with banco() as con:
     con.executescript('''
@@ -41,6 +48,14 @@ def resumo(senha, sal):
 
 def digest(token):
     return hashlib.sha256(token.encode()).hexdigest()
+
+# Perfil local explícito; não redefine senha ou histórico a cada reinício.
+if PERFIL_TESTE:
+    with banco() as con:
+        if not con.execute('SELECT 1 FROM contas WHERE email=?', ('teste',)).fetchone():
+            sal = secrets.token_hex(16)
+            con.execute('INSERT INTO contas(nome,email,sal,senha) VALUES(?,?,?,?)',
+                        ('Teste', 'teste', sal, resumo('123', sal)))
 
 class Erro(Exception):
     def __init__(self, status, mensagem):
@@ -96,7 +111,7 @@ class API(BaseHTTPRequestHandler):
         except Exception:
             return ''
     def conta(self, con):
-        conta = con.execute('SELECT c.id,c.nome FROM contas c JOIN sessoes s ON s.conta=c.id WHERE s.token=? AND s.expira>?', (digest(self.token()), time.time())).fetchone()
+        conta = con.execute('SELECT c.id,c.nome FROM contas c JOIN sessoes s ON s.conta=c.id WHERE s.token=? AND s.expira>? AND (c.email!=? OR ?)', (digest(self.token()), time.time(), 'teste', PERFIL_TESTE)).fetchone()
         if not conta:
             raise Erro(401, 'Entre na sua conta para continuar.')
         return dict(conta)
@@ -129,6 +144,8 @@ class API(BaseHTTPRequestHandler):
             return self.enviar(200, arquivo.read_bytes(), tipo)
         if metodo == 'GET' and caminho == '/api/saude':
             return self.enviar(200, {'estado': 'ok'})
+        if metodo == 'GET' and caminho == '/api/configuracao':
+            return self.enviar(200, {'perfilTeste': PERFIL_TESTE})
         dados = {}
         if metodo == 'POST':
             if self.headers.get('Origin') != ORIGEM:
@@ -149,7 +166,10 @@ class API(BaseHTTPRequestHandler):
                     raise Erro(400, 'Informe um e-mail válido.')
                 email = email.strip().lower()
                 senha = dados.get('senha', '')
-                if not isinstance(senha, str) or not re.fullmatch(r'[^\s@]{1,100}@[^\s@]{1,100}\.[^\s@]{2,30}', email) or not 12 <= len(senha) <= 128:
+                eh_teste = caminho == '/api/entrar' and email == 'teste' and PERFIL_TESTE
+                if not isinstance(senha, str) or len(senha) > 128 or not senha:
+                    raise Erro(400, 'Informe sua senha.')
+                if not eh_teste and (not re.fullmatch(r'[^\s@]{1,100}@[^\s@]{1,100}\.[^\s@]{2,30}', email) or not 12 <= len(senha) <= 128):
                     raise Erro(400, 'Informe e-mail válido e senha com 12 a 128 caracteres.')
                 self.limitar(con, 'email:' + digest(email), 10)
                 if caminho == '/api/cadastro':

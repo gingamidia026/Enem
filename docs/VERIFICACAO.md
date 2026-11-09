@@ -18,3 +18,11 @@ PLAYWRIGHT_MODULO=/tmp/enem-verificacao/node_modules/playwright-core node tests/
 ```
 
 O teste de navegador requer Chrome no caminho `/opt/google/chrome/chrome` ou variável `CHROME`. Cria uma conta de teste única no banco local e salva capturas em `docs/`. Não executar contra produção.
+
+## Alteração solicitada em 09/11/2026
+
+Login local `teste` / `123`, perfil Teste, com acesso a treino, simulado e progresso. Cadastro individual continua com senha longa. Teste HTTP verifica senha incorreta, entrada correta, resposta persistida e bloqueio do perfil/sessão quando a opção de teste é desativada. O perfil é compartilhado, sem promessa de isolamento entre pessoas usando as mesmas credenciais.
+
+Comando `enem` com iniciar, parar, reiniciar, status, logs e ajuda; instalador sem sobrescrita de outro comando. O atalho foi testado em diretório temporário permitido. A instalação definitiva em `~/.local/bin` depende da execução do instalador pela Dominique, porque essa pasta está fora das raízes de escrita desta sessão.
+
+Correção de arquitetura: dados permanecem no volume Docker deste PC, sem sincronização com GitHub/nuvem. O acesso continua local; nenhuma conexão pública foi ativada. O navegador solicita os dados das rotas autenticadas. Autora: Dominique-Oliveira-ChatGPT🤖💚.
