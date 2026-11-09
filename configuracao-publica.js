@@ -1,2 +1,2 @@
-// Ativar somente após comprovar que o intermediário aceita acesso público.
-window.ENEM_PUBLICO = Object.freeze({habilitado: false, intermediario: ''});
+// Dominique-Oliveira-ChatGPT🤖💚 — conexão pública verificada.
+window.ENEM_PUBLICO = Object.freeze({habilitado: true, intermediario: 'https://enem-ginga-conexao.sabrinaconradoadv.chatgpt.site'});

@@ -6,8 +6,8 @@ Aplicação de estudo com Docker, contas e histórico no PC da Dominique. Autora
 
 - Funcionam na instalação local: perfil Teste (`teste` / `123`), cadastro individual, treino por área, explicação, simulado curto e progresso persistente.
 - A interface pública é publicada no GitHub Pages, com o mesmo visual da aplicação. Não contém links para localhost.
-- A conexão pública está **preparada, mas desativada**. A ferramenta Sites recusou mudar o intermediário de privado para público porque exige aprovação e a política da sessão não permite aprovações. Não há conexão pública funcional com o PC neste estado.
-- O login público mostra uma mensagem de configuração e não autentica pessoas enquanto essa dependência existir. Não há simulação de login nem armazenamento alternativo no navegador.
+- Conexão pública ativada em 09/11/2026. Login e painel autenticado verificados por HTTPS. O PC e o conector precisam permanecer ligados.
+- Cadastro e login usam o banco local por intermédio da fila pública.
 
 Quatro questões autorais demonstrativas, sem vínculo com o Inep e sem cálculo TRI. Ainda não há banco oficial completo, professores, redação, recuperação de senha ou verificação de e-mail. O perfil Teste é compartilhado; contas individuais têm seus históricos separados.
 
@@ -30,7 +30,7 @@ O instalador cria o atalho em `~/.local/bin` sem substituir outro comando. A ses
 
 ## Acesso público sem portas abertas no PC
 
-Fluxo implementado em código, ainda não ativado:
+Fluxo ativo:
 
 1. Navegador acessa somente o GitHub Pages e o intermediário HTTPS público.
 2. O intermediário valida a origem e permite somente operações de cadastro, login, questões, respostas e progresso. Ele coloca o pedido em uma fila temporária.
@@ -48,19 +48,11 @@ Pedidos são válidos por 35 segundos. O payload do pedido é limpo após a reti
 
 A ausência do conector deve aparecer como indisponibilidade temporária. Um PC desligado não pode atender visitantes; manter o volume local não oferece disponibilidade quando ele está offline. Antes de uso com dados reais, revisar retenção, privacidade, menores, proteção contra abuso, backup e carga.
 
-## Ativação pendente
+## Conexão ativa
 
-O projeto do intermediário está registrado em `conexao-publica/.openai/hosting.json`. Seu código, migração e artefato foram preparados. A publicação pública foi bloqueada pela ferramenta; nenhum túnel ou porta alternativa foi aberto.
+Intermediário publicado como público com D1 e segredo do conector. A chave local permanece fora do Git. O comando `./enem` inicia o conector quando `.segredos/ativado` está presente.
 
-Após uma sessão com capacidade de aprovar a mudança de público:
-
-1. Revisar e publicar o intermediário como público, com o binding D1 `DB` e a chave secreta `CHAVE_CONECTOR`.
-2. Provisionar a mesma chave no arquivo `.segredos/conector` deste PC, fora do Git. Manter o diretório em 0700 e o arquivo em leitura para o usuário do contêiner. Não copiar uma chave pública de exemplo.
-3. Ajustar a origem HTTPS verificada em `compose.publico.yaml` e em `configuracao-publica.js`; habilitar a configuração somente após teste externo.
-4. Criar `.segredos/ativado` e iniciar `enem`. A presença da chave sozinha não inicia a conexão pública.
-5. Conferir de outro aparelho o fluxo inteiro, o isolamento das contas, expiração e desligamento do PC antes de declarar o acesso público concluído.
-
-O `.env`, as chaves, o banco e o estado da sessão nunca devem ir para GitHub. O repositório contém código e conteúdo demonstrativo, não os dados operacionais.
+Verificados por HTTPS: disponibilidade, login, painel e saída. Os testes locais verificam cadastro, isolamento de contas e limitação de tentativas. Acesso exige PC e Docker ligados. Autora da ativação: Dominique-Oliveira-ChatGPT🤖💚.
 
 ## Conferência
 

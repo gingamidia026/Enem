@@ -19,7 +19,7 @@ def permitido(metodo, caminho):
 
 def remoto(rota, dados):
     req = urllib.request.Request(REMOTO + rota, data=json.dumps(dados).encode(), headers={
-        'Authorization': 'Bearer ' + CHAVE, 'Content-Type': 'application/json'})
+        'Authorization': 'Bearer ' + CHAVE, 'Content-Type': 'application/json', 'User-Agent': 'ENEM-Conector/1.0'})
     with urllib.request.urlopen(req, timeout=12) as resposta:
         return json.load(resposta)
 
