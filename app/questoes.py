@@ -5,3 +5,16 @@ QUESTOES = [
     dict(id=3, area='Ciências da Natureza', titulo='Energia em transformação', enunciado='Em um painel fotovoltaico, qual transformação de energia permite gerar eletricidade?', alternativas=['Sonora em térmica', 'Luminosa em elétrica', 'Elétrica em nuclear', 'Química em sonora', 'Mecânica em luminosa'], correta=1, explicacao='Células fotovoltaicas convertem parte da energia da luz em energia elétrica.'),
     dict(id=4, area='Ciências Humanas', titulo='Cidade e mobilidade', enunciado='Uma cidade cria faixas exclusivas de ônibus para reduzir o tempo das viagens coletivas. Qual objetivo está diretamente ligado a essa medida?', alternativas=['Priorizar o transporte individual', 'Eliminar deslocamentos a pé', 'Melhorar a mobilidade por transporte coletivo', 'Reduzir a oferta de ônibus', 'Aumentar vagas de estacionamento'], correta=2, explicacao='Faixas exclusivas diminuem a interferência do trânsito de automóveis na circulação dos ônibus e favorecem o transporte coletivo.'),
 ]
+
+
+# Exportação selecionada somente leitura; nunca monta o cofre na aplicação.
+import json
+import os
+from pathlib import Path
+CATALOGO = None
+ARQUIVO_CATALOGO = os.environ.get('CATALOGO', '')
+if ARQUIVO_CATALOGO:
+    CATALOGO = json.loads(Path(ARQUIVO_CATALOGO).read_text())
+    if CATALOGO.get('formato') != 1 or not isinstance(CATALOGO.get('questoes'), list):
+        raise RuntimeError('Catálogo de questões inválido. Execute pu reiniciar.')
+    QUESTOES = CATALOGO['questoes']

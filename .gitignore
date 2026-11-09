@@ -7,3 +7,4 @@ node_modules/
 .segredos/
 conexao-publica/dist/
 conexao-publica/.sites/
+.catalogo/

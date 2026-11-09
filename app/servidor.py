@@ -2,6 +2,7 @@
 import hashlib
 import hmac
 import json
+import ipaddress
 import os
 import re
 import secrets
@@ -12,7 +13,8 @@ from contextlib import contextmanager
 from http.cookies import SimpleCookie
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from questoes import QUESTOES
+from questoes import QUESTOES, CATALOGO, ARQUIVO_CATALOGO
+import base64
 
 DADOS = Path(os.environ.get('DADOS', '/dados'))
 DADOS.mkdir(parents=True, exist_ok=True)
@@ -21,6 +23,12 @@ BANCO = DADOS / 'estudos.sqlite3'
 ORIGEM = os.environ.get('ORIGEM', 'http://localhost:8088')
 PERFIL_TESTE = os.environ.get('PERFIL_TESTE', '0') == '1'
 SEGURO = os.environ.get('COOKIE_SEGURO', '0') == '1'
+PRODUCAO = os.environ.get('PRODUCAO', '0') == '1'
+PROXY_CONFIAVEL = os.environ.get('PROXY_CONFIAVEL', '0') == '1'
+COOKIE = '__Host-sessao' if SEGURO else 'sessao'
+VAGAS_SENHA = threading.BoundedSemaphore(2)
+if PRODUCAO and (not SEGURO or PERFIL_TESTE or not ORIGEM.startswith('https://')):
+    raise RuntimeError('Produção exige HTTPS, cookie seguro e perfil de teste desligado.')
 PUBLICO = Path(__file__).parent / 'public'
 
 @contextmanager
@@ -43,8 +51,16 @@ with banco() as con:
     ''')
 os.chmod(BANCO, 0o600)
 
-def resumo(senha, sal):
-    return hashlib.scrypt(senha.encode(), salt=bytes.fromhex(sal), n=16384, r=8, p=1).hex()
+def resumo(senha, sal, legado=False):
+    if not VAGAS_SENHA.acquire(blocking=False):
+        raise Erro(429, 'Muitas solicitações de entrada. Tente novamente em instantes.')
+    try:
+        # Parâmetros registrados junto ao hash; mantém leitura das contas antigas.
+        n, p = (16384, 1) if legado else (32768, 3)
+        valor = hashlib.scrypt(senha.encode(), salt=bytes.fromhex(sal), n=n, r=8, p=p, maxmem=64*1024*1024).hex()
+        return valor if legado else 'scrypt$32768$8$3$' + valor
+    finally:
+        VAGAS_SENHA.release()
 
 def digest(token):
     return hashlib.sha256(token.encode()).hexdigest()
@@ -86,6 +102,15 @@ class API(BaseHTTPRequestHandler):
     def log_message(self, formato, *args):
         # Não registrar corpo, cookies, nomes ou e-mails.
         pass
+    def registrar(self, evento, status):
+        # Somente categorias fixas; sem URL, IP, e-mail, senha, sessão ou corpo.
+        print(json.dumps({'tempo': int(time.time()), 'evento': evento, 'status': status}), flush=True)
+    def cliente(self):
+        endereco = self.headers.get('X-ENEM-Cliente', '') if PROXY_CONFIAVEL else self.client_address[0]
+        try:
+            return digest(str(ipaddress.ip_address(endereco)))
+        except ValueError:
+            raise Erro(400, 'Identificação de conexão inválida.')
     def enviar(self, status, dado, tipo='application/json; charset=utf-8', cookie=None):
         corpo = json.dumps(dado, ensure_ascii=False).encode() if tipo.startswith('application/json') else dado
         self.send_response(status)
@@ -96,24 +121,27 @@ class API(BaseHTTPRequestHandler):
         self.send_header('X-Frame-Options', 'DENY')
         self.send_header('Referrer-Policy', 'no-referrer')
         self.send_header('Permissions-Policy', 'camera=(), microphone=(), geolocation=()')
-        self.send_header('Content-Security-Policy', "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self'; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'")
+        self.send_header('Content-Security-Policy', "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; object-src 'none'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'")
         if SEGURO:
             self.send_header('Strict-Transport-Security', 'max-age=31536000')
         if cookie:
             self.send_header('Set-Cookie', cookie)
+        if status == 429:
+            self.send_header('Retry-After', '900')
         self.end_headers()
         self.wfile.write(corpo)
     def painel(self, con, conta):
         totais = con.execute('SELECT COUNT(*) total,COALESCE(SUM(acerto),0) acertos FROM respostas WHERE conta=?', (conta['id'],)).fetchone()
         # Somente enunciados; gabarito e explicação continuam exclusivos da correção.
         return {'conta': conta, 'progresso': dict(totais), 'questoes': [
-            {k: q[k] for k in ['id', 'area', 'titulo', 'enunciado', 'alternativas']} for q in QUESTOES]}
+            {k: q[k] for k in (['id','area','titulo'] if q.get('oficial') else ['id', 'area', 'titulo', 'enunciado', 'alternativas'])} for q in QUESTOES],
+            'catalogo': {'origem':'cofre','total':len(QUESTOES),'anuladas':CATALOGO['anuladas'],'revisar':CATALOGO['revisar'],'versao':CATALOGO['versao']} if CATALOGO is not None else {'origem':'demonstracao','total':len(QUESTOES)}}
 
     def token(self):
         cookie = SimpleCookie()
         try:
             cookie.load(self.headers.get('Cookie', ''))
-            return cookie['sessao'].value if 'sessao' in cookie else ''
+            return cookie[COOKIE].value if COOKIE in cookie else ''
         except Exception:
             return ''
     def conta(self, con):
@@ -133,10 +161,13 @@ class API(BaseHTTPRequestHandler):
         try:
             self.rota(metodo)
         except Erro as erro:
+            if erro.status in [401,403,413,429]:
+                self.registrar('solicitacao_recusada', erro.status)
             self.enviar(erro.status, {'erro': erro.mensagem})
         except (ValueError, TypeError, KeyError, UnicodeDecodeError):
             self.enviar(400, {'erro': 'Dados inválidos. Confira os campos.'})
         except Exception:
+            self.registrar('falha_interna', 500)
             self.enviar(500, {'erro': 'Não foi possível concluir. Tente novamente.'})
     def do_GET(self):
         self.executar('GET')
@@ -144,9 +175,9 @@ class API(BaseHTTPRequestHandler):
         self.executar('POST')
     def rota(self, metodo):
         caminho = self.path.split('?')[0]
-        if metodo == 'GET' and caminho in ['/', '/app.js', '/estilo.css']:
-            arquivo = PUBLICO / {'/': 'index.html', '/app.js': 'app.js', '/estilo.css': 'estilo.css'}[caminho]
-            tipo = {'/': 'text/html; charset=utf-8', '/app.js': 'text/javascript; charset=utf-8', '/estilo.css': 'text/css; charset=utf-8'}[caminho]
+        if metodo == 'GET' and caminho in ['/', '/app.js', '/simulador.js', '/estilo.css', '/textura.svg']:
+            arquivo = PUBLICO / {'/': 'index.html', '/app.js': 'app.js', '/simulador.js': 'simulador.js', '/estilo.css': 'estilo.css', '/textura.svg': 'textura.svg'}[caminho]
+            tipo = {'/': 'text/html; charset=utf-8', '/app.js': 'text/javascript; charset=utf-8', '/simulador.js': 'text/javascript; charset=utf-8', '/estilo.css': 'text/css; charset=utf-8', '/textura.svg': 'image/svg+xml'}[caminho]
             return self.enviar(200, arquivo.read_bytes(), tipo)
         if metodo == 'GET' and caminho == '/api/saude':
             return self.enviar(200, {'estado': 'ok'})
@@ -166,7 +197,8 @@ class API(BaseHTTPRequestHandler):
                 raise Erro(400, 'Envie um objeto JSON.')
         with banco() as con:
             if metodo == 'POST' and caminho in ['/api/cadastro', '/api/entrar']:
-                self.limitar(con, 'autenticacao', 100)
+                cliente = self.cliente()
+                self.limitar(con, 'entrada_origem:' + cliente, 30)
                 email = dados.get('email', '')
                 if not isinstance(email, str):
                     raise Erro(400, 'Informe um e-mail válido.')
@@ -177,7 +209,7 @@ class API(BaseHTTPRequestHandler):
                     raise Erro(400, 'Informe sua senha.')
                 if not eh_teste and (not re.fullmatch(r'[^\s@]{1,100}@[^\s@]{1,100}\.[^\s@]{2,30}', email) or not 12 <= len(senha) <= 128):
                     raise Erro(400, 'Informe e-mail válido e senha com 12 a 128 caracteres.')
-                self.limitar(con, 'email:' + digest(email), 10)
+                self.limitar(con, 'entrada_conta_origem:' + digest(email) + ':' + cliente, 10)
                 if caminho == '/api/cadastro':
                     nome = dados.get('nome', '')
                     if not isinstance(nome, str):
@@ -193,20 +225,25 @@ class API(BaseHTTPRequestHandler):
                         raise Erro(400, 'Não foi possível cadastrar. Confira os dados ou entre na sua conta.')
                 conta = con.execute('SELECT * FROM contas WHERE email=?', (email,)).fetchone()
                 sal = conta['sal'] if conta else '0' * 32
-                valido = hmac.compare_digest(resumo(senha, sal), conta['senha'] if conta else '0' * 128)
+                legado = bool(conta and not conta['senha'].startswith('scrypt$'))
+                valido = hmac.compare_digest(resumo(senha, sal, legado), conta['senha'] if conta else '0' * 128)
                 if not conta or not valido:
                     raise Erro(401, 'E-mail ou senha incorretos.')
+                if legado:
+                    con.execute('UPDATE contas SET senha=? WHERE id=?', (resumo(senha, sal), conta['id']))
                 token = secrets.token_urlsafe(32)
                 con.execute('DELETE FROM sessoes WHERE expira<? OR token=?', (time.time(), digest(self.token())))
                 con.execute('INSERT INTO sessoes VALUES(?,?,?)', (digest(token), conta['id'], time.time() + 30 * 86400))
+                con.execute('DELETE FROM sessoes WHERE conta=? AND token NOT IN (SELECT token FROM sessoes WHERE conta=? ORDER BY expira DESC LIMIT 5)', (conta['id'], conta['id']))
                 con.commit()
-                cookie = f'sessao={token}; HttpOnly; SameSite=Strict; Path=/; Max-Age=2592000' + ('; Secure' if SEGURO else '')
+                self.registrar('entrada_aceita', 200)
+                cookie = f'{COOKIE}={token}; HttpOnly; SameSite=Strict; Path=/; Max-Age=2592000' + ('; Secure' if SEGURO else '')
                 return self.enviar(200, {'nome': conta['nome'], 'painel': self.painel(con, {'id': conta['id'], 'nome': conta['nome']})}, cookie=cookie)
             conta = self.conta(con)
             if metodo == 'POST' and caminho == '/api/sair':
                 con.execute('DELETE FROM sessoes WHERE token=?', (digest(self.token()),))
                 con.commit()
-                return self.enviar(200, {'ok': True}, cookie='sessao=; HttpOnly; SameSite=Strict; Path=/; Max-Age=0' + ('; Secure' if SEGURO else ''))
+                return self.enviar(200, {'ok': True}, cookie=COOKIE+'=; HttpOnly; SameSite=Strict; Path=/; Max-Age=0' + ('; Secure' if SEGURO else ''))
             if metodo == 'GET' and caminho == '/api/painel':
                 return self.enviar(200, self.painel(con, conta))
             partes = re.fullmatch(r'/api/questoes/([0-9]+)', caminho)
@@ -216,6 +253,22 @@ class API(BaseHTTPRequestHandler):
                     raise Erro(404, 'Questão não encontrada.')
                 if metodo == 'GET':
                     return self.enviar(200, {k: v for k, v in questao.items() if k not in ['correta', 'explicacao']})
+                if dados.get('acao') == 'imagem':
+                    indice, parte = dados.get('indice'), dados.get('parte')
+                    imagens = questao.get('imagens', [])
+                    if type(indice) is not int or not 0 <= indice < len(imagens):
+                        raise Erro(400, 'Imagem inválida.')
+                    info = imagens[indice]
+                    if type(parte) is not int or not 0 <= parte < info['partes']:
+                        raise Erro(400, 'Parte de imagem inválida.')
+                    sha = info['hash']
+                    if not re.fullmatch(r'[0-9a-f]{64}', sha):
+                        raise Erro(400, 'Imagem inválida.')
+                    arquivo = Path(ARQUIVO_CATALOGO).parent / 'imagens' / (sha + '.png')
+                    with arquivo.open('rb') as imagem:
+                        imagem.seek(parte * 49152)
+                        bloco = imagem.read(49152)
+                    return self.enviar(200, {'bloco':base64.b64encode(bloco).decode(), 'partes':info['partes'], 'tipo':'image/png', 'hash':sha})
                 alternativa = dados.get('alternativa')
                 if type(alternativa) is not int or not 0 <= alternativa < len(questao['alternativas']):
                     raise Erro(400, 'Selecione uma alternativa válida.')

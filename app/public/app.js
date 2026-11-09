@@ -81,6 +81,7 @@ function tela(html) {
   }
 }
 function login() {
+  PUSimulador.limpar();
   menu.hidden = true;
   document.body.classList.add('sem-sessao');
   tela(`<div class="acesso"><section class="formulario"><h1>${cadastro ? 'Crie seu espaço' : 'Entre para estudar'}</h1><p>Continue seus estudos, no seu ritmo.</p>${publico && !conexao.habilitado ? '<p class="nota" role="status">O acesso público está em configuração. Ainda não é possível entrar.</p>' : ''}<form id="acesso">${cadastro ? '<label for="nome">Como você se chama?</label><input id="nome" name="nome" autocomplete="name" minlength="2" maxlength="80" required>' : ''}<label for="email">${cadastro ? 'E-mail' : 'Login'}</label><input id="email" name="email" type="${cadastro ? 'email' : 'text'}" autocomplete="username" maxlength="232" spellcheck="false" required><label for="senha">Senha</label><input id="senha" name="senha" type="password" autocomplete="${cadastro ? 'new-password' : 'current-password'}" minlength="${cadastro ? 12 : 1}" maxlength="128" required><small>${cadastro ? 'Use de 12 a 128 caracteres.' : 'Digite sua senha para entrar.'}</small><button type="submit" ${publico && !conexao.habilitado ? 'disabled' : ''}>${cadastro ? 'Criar conta' : 'Entrar'}</button><p id="erro-acesso" class="erro-campo" role="alert"></p></form><button class="discreto troca" id="trocar">${cadastro ? 'Já tenho uma conta' : 'Quero criar uma conta'}</button><p class="privacidade"><small>Guardamos seu nome, e-mail e respostas para mostrar seu progresso. Use dados de teste nesta versão inicial.</small></p></section></div>`);
@@ -98,25 +99,54 @@ function navegar() {
   if (!painel) return login();
   simulado = null;
   const pagina = location.hash || '#inicio';
+  const oficial = painel.catalogo?.origem === 'cofre';
+  const quantidadeSimulado = Math.min(10, painel.questoes.length);
   menu.querySelectorAll('a').forEach(a => { if(a.hash === pagina) a.setAttribute('aria-current','page'); else a.removeAttribute('aria-current'); });
-  if(pagina === '#questoes') {
+  if(pagina === '#nota') {
+    PUSimulador.mostrar(conteudo);
+  } else if(pagina === '#questoes') {
     tela('<h1>Escolha o que praticar.</h1><p>Comece por uma área ou explore todas as questões disponíveis.</p><label for="area">Área do conhecimento</label><select id="area"><option value="">Todas as áreas</option>' + [...new Set(painel.questoes.map(q=>q.area))].map(a=>`<option>${escapar(a)}</option>`).join('') + '</select><div id="lista"></div>');
     const listar = () => { document.querySelector('#lista').innerHTML = painel.questoes.filter(q=>!document.querySelector('#area').value || q.area === document.querySelector('#area').value).map(q=>`<article class="linha"><div><p>${escapar(q.area)}</p><h2>${escapar(q.titulo)}</h2></div><button data-questao="${q.id}">Resolver questão</button></article>`).join(''); document.querySelectorAll('[data-questao]').forEach(b=>b.onclick=()=>abrir(Number(b.dataset.questao)).catch(erro)); };
     document.querySelector('#area').onchange = listar; listar();
+    if(oficial) {const resumo=document.createElement('p');resumo.className='secundario';resumo.textContent=`${painel.questoes.length} questões do cofre disponíveis. Questões anuladas ficam fora do treino.`;document.querySelector('#lista').before(resumo);}
   } else if(pagina === '#simulado') {
-    tela(`<h1>Uma pausa para praticar.</h1><p>Resolva as ${painel.questoes.length} questões demonstrativas, uma de cada área. Ao final, veja quantas acertou nesta rodada.</p><div class="nota">Simulado curto de demonstração, sem cronômetro e sem cálculo de nota TRI. As respostas enviadas entram no seu progresso; a rodada em andamento é perdida ao sair da página.</div><button id="comecar">Começar simulado curto</button>`);
-    document.querySelector('#comecar').onclick=()=>{simulado={indice:0,acertos:0,ids:painel.questoes.map(q=>q.id)}; abrir(simulado.ids[0]).catch(erro);};
+    tela(`<h1>Uma pausa para praticar.</h1><p>Resolva ${quantidadeSimulado} questões ${oficial ? 'do banco do cofre' : 'demonstrativas, uma de cada área'}. Ao final, veja quantas acertou nesta rodada.</p><div class="nota">${oficial ? 'Rodada de prática com questões oficiais do cofre' : 'Simulado curto de demonstração'}, sem cronômetro e sem cálculo de nota TRI. As respostas enviadas entram no seu progresso; a rodada em andamento é perdida ao sair da página.</div><button id="comecar" ${quantidadeSimulado ? '' : 'disabled'}>Começar simulado curto</button>`);
+    document.querySelector('#comecar').onclick=()=>{simulado={indice:0,acertos:0,ids:painel.questoes.slice(0,quantidadeSimulado).map(q=>q.id)}; abrir(simulado.ids[0]).catch(erro);};
   } else if(pagina === '#progresso') {
     tela(`<h1>Seu estudo, até aqui.</h1>${indicadores()}<p>${painel.progresso.total ? 'Cada tentativa faz parte do seu histórico. Repetir uma questão também conta como uma nova resposta.' : 'Seu progresso começa na primeira resposta. Escolha uma questão para experimentar.'}</p><a class="botao" href="#questoes">Praticar questões</a><div class="nota">Esses números representam tentativas e acertos nesta plataforma. Não são previsão de desempenho no ENEM.</div>`);
   } else {
-    tela(`<p>Olá, ${escapar(painel.conta.nome)}.</p><h1>Vamos dar o próximo passo?</h1><p>Escolha uma questão, tente resolver e confira a explicação. Seu progresso fica guardado na sua conta.</p><div class="acoes"><a class="botao" href="#questoes">Praticar agora</a><a class="botao discreto" href="#simulado">Fazer simulado curto</a></div>${indicadores()}<h2>Um pouco de cada área</h2><p>Matemática, Linguagens, Ciências Humanas e Ciências da Natureza.</p><div class="nota">Catálogo inicial com conteúdo autoral demonstrativo. O banco de questões oficiais ainda não está incluído.</div>`);
+    tela(`<p>Olá, ${escapar(painel.conta.nome)}.</p><h1>Vamos dar o próximo passo?</h1><p>Escolha uma questão, tente resolver e confira a resposta. Seu progresso fica guardado na sua conta.</p><div class="acoes"><a class="botao" href="#questoes">Praticar agora</a><a class="botao discreto" href="#simulado">Fazer simulado curto</a><a class="botao discreto" href="#nota">Simular nota Enem</a></div>${indicadores()}<h2>Um pouco de cada área</h2><p>Matemática, Linguagens, Ciências Humanas e Ciências da Natureza.</p><div class="nota">${oficial ? `Banco do cofre com ${painel.questoes.length} questões disponíveis. Atualizado ao iniciar ou reiniciar o PU no PC.` : 'Catálogo inicial com conteúdo autoral demonstrativo. O banco de questões oficiais ainda não está incluído.'}</div>`);
   }
 }
 async function abrir(id) {
   aviso.textContent = 'Carregando questão…';
   const conhecida = painel?.questoes.find(q=>q.id===id);
   const q = conhecida?.enunciado && conhecida?.alternativas ? conhecida : await api('/api/questoes/' + id);
-  tela(`<section class="questao" aria-label="Folha de questões"><div class="cabecalho-prova"><strong>Pé na Universidade</strong><span>${simulado ? 'Simulado curto' : 'Caderno de prática'}</span></div><p class="dados-questao">${escapar(q.area)}${simulado ? ` · Questão ${simulado.indice+1} de ${simulado.ids.length}` : ''}</p><h1>${escapar(q.titulo)}</h1><p class="enunciado">${escapar(q.enunciado)}</p><form id="responder"><fieldset><legend>Selecione sua resposta</legend>${q.alternativas.map((a,i)=>`<label class="alternativa"><input type="radio" name="alternativa" value="${i}" required><span>${String.fromCharCode(65+i)}. ${escapar(a)}</span></label>`).join('')}</fieldset><button type="submit">Conferir resposta</button></form><div id="resultado" aria-live="polite"></div></section>`);
+  tela(`<section class="questao" aria-label="Folha de questões"><div class="cabecalho-prova"><strong>Pé na Universidade</strong><span>${simulado ? 'Simulado curto' : 'Caderno de prática'}</span></div><p class="dados-questao">${escapar(q.area)}${simulado ? ` · Questão ${simulado.indice+1} de ${simulado.ids.length}` : ''}</p><h1>${escapar(q.titulo)}</h1>${q.oficial ? `<p class="secundario">${escapar(q.materia)}${q.revisar ? ' · Classificação de assunto em revisão' : ''}</p>` : ''}<p class="enunciado">${escapar(q.enunciado)}</p>${q.imagens?.length ? `<div class="originais"><p>${q.textoParcial ? 'A extração do texto não preservou todas as alternativas. Abra a imagem original antes de responder.' : 'Consulte a imagem original para conferir figuras, tabelas e fórmulas.'}</p><button type="button" id="ver-original">Ver imagem original da prova</button><p id="estado-original" role="status"></p><div id="imagens-originais"></div></div>` : ''}${q.fonte ? `<p><a href="${escapar(q.fonte)}" target="_blank" rel="noopener noreferrer">Abrir caderno oficial no Inep</a></p>` : ''}<form id="responder"><fieldset><legend>Selecione sua resposta</legend>${q.alternativas.map((a,i)=>`<label class="alternativa"><input type="radio" name="alternativa" value="${i}" required><span>${String.fromCharCode(65+i)}. ${escapar(a)}</span></label>`).join('')}</fieldset><button type="submit" ${q.textoParcial ? 'disabled' : ''}>Conferir resposta</button></form><div id="resultado" aria-live="polite"></div></section>`);
+  const verOriginal = document.querySelector('#ver-original');
+  if(verOriginal) verOriginal.onclick=async()=>{
+    const destino=document.querySelector('#imagens-originais');
+    const estado=document.querySelector('#estado-original');
+    verOriginal.disabled=true;
+    try {
+      destino.replaceChildren();
+      for(let indice=0;indice<q.imagens.length;indice++) {
+        const info=q.imagens[indice];const blocos=[];
+        for(let inicio=0;inicio<info.partes;inicio+=3) {
+          estado.textContent=`Carregando imagem ${indice+1} de ${q.imagens.length}, parte ${inicio+1} de ${info.partes}…`;
+          const partes=await Promise.all(Array.from({length:Math.min(3,info.partes-inicio)},(_,j)=>api('/api/questoes/'+id,{acao:'imagem',indice,parte:inicio+j})));
+          if(!destino.isConnected) return;
+          partes.forEach(parte=>blocos.push(parte.bloco));
+        }
+        const imagem=document.createElement('img');imagem.alt=`Imagem original ${indice+1} da questão ${q.titulo}`;
+        imagem.src='data:image/png;base64,'+blocos.join('');
+        await imagem.decode();destino.append(imagem);
+      }
+      estado.textContent='Imagens originais carregadas. Você pode conferir sua resposta.';
+      document.querySelector('#responder button[type=submit]').disabled=false;
+      verOriginal.hidden=true;
+    } catch(e) {if(estado.isConnected){estado.textContent=mensagemErro(e);verOriginal.disabled=false;}}
+  };
   document.querySelector('#responder').onsubmit=async evento=>{
     evento.preventDefault(); const form=evento.currentTarget; const botao=form.querySelector('button'); botao.disabled=true; botao.setAttribute('aria-busy','true'); botao.textContent='Conferindo…';
     try {
@@ -154,7 +184,7 @@ if (publico) {
 // Navegar também quando o destino já é a seção selecionada.
 document.addEventListener('click', evento => {
   const link = evento.target.closest('a[href^="#"]');
-  if (link && ['#inicio','#questoes','#simulado','#progresso'].includes(link.hash) && link.hash === location.hash) { evento.preventDefault(); navegar(); }
+  if (link && ['#inicio','#questoes','#simulado','#nota','#progresso'].includes(link.hash) && link.hash === location.hash) { evento.preventDefault(); navegar(); }
 });
 
 document.addEventListener('pointerdown',()=>{document.documentElement.dataset.entrada='ponteiro';});

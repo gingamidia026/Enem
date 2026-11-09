@@ -8,6 +8,7 @@ import subprocess
 import tempfile
 import time
 import unittest
+from contextlib import closing
 import urllib.error
 import urllib.request
 
@@ -20,7 +21,7 @@ class Testes(unittest.TestCase):
             s.bind(('127.0.0.1', 0))
             porta = s.getsockname()[1]
         cls.origem = f'http://127.0.0.1:{porta}'
-        cls.processo = subprocess.Popen(['python3', str(RAIZ/'app/servidor.py')], env={**os.environ, 'DADOS':cls.pasta.name, 'PORTA':str(porta), 'ORIGEM':cls.origem, 'PERFIL_TESTE':getattr(cls,'perfil','0')})
+        cls.processo = subprocess.Popen(['python3', str(RAIZ/'app/servidor.py')], stdout=subprocess.DEVNULL, env={**os.environ, 'DADOS':cls.pasta.name, 'PORTA':str(porta), 'ORIGEM':getattr(cls, 'origem_cabecalho', cls.origem), 'PERFIL_TESTE':getattr(cls,'perfil','0'), **getattr(cls,'ambiente_extra',{})})
         for _ in range(100):
             try:
                 with urllib.request.urlopen(cls.origem+'/api/saude', timeout=1):
@@ -35,8 +36,8 @@ class Testes(unittest.TestCase):
         cls.processo.terminate(); cls.processo.wait(); cls.pasta.cleanup()
     def cliente(self):
         return urllib.request.build_opener(urllib.request.HTTPCookieProcessor(http.cookiejar.CookieJar()))
-    def pedido(self, cliente, caminho, dados=None, origem=True):
-        cabecalhos={'Origin':self.origem if origem else 'https://outro.example', 'Content-Type':'application/json'}
+    def pedido(self, cliente, caminho, dados=None, origem=True, extras=None):
+        cabecalhos={'Origin':getattr(self,'origem_cabecalho',self.origem) if origem else 'https://outro.example', 'Content-Type':'application/json', **(extras or {})}
         req=urllib.request.Request(self.origem+caminho,data=None if dados is None else json.dumps(dados).encode(),headers=cabecalhos)
         try:
             resposta=cliente.open(req)
@@ -141,6 +142,67 @@ class PerfilTeste(unittest.TestCase):
         with sqlite3.connect(Path(self.pasta.name)/'estudos.sqlite3') as con:
             self.assertEqual(con.execute('SELECT COUNT(*) FROM respostas').fetchone()[0], 1)
         con.close()
+
+class Seguranca(unittest.TestCase):
+    ambiente_extra = {'PROXY_CONFIAVEL':'1', 'COOKIE_SEGURO':'1', 'PRODUCAO':'1'}
+    origem_cabecalho = 'https://enem.example'
+    setUpClass = classmethod(Testes.setUpClass.__func__)
+    tearDownClass = classmethod(Testes.tearDownClass.__func__)
+    cliente = Testes.cliente
+    pedido = Testes.pedido
+
+    def requisicao(self, cliente, caminho, dados=None, ip='192.0.2.1', cookie=None):
+        cabecalhos = {'X-ENEM-Cliente': ip}
+        if cookie is not None: cabecalhos['Cookie'] = cookie
+        return self.pedido(cliente, caminho, dados, extras=cabecalhos)
+
+    def test_cookie_producao_expiracao_e_isolamento(self):
+        import sqlite3
+        cliente = self.cliente()
+        tokens = []
+        for i in range(2):
+            status, dados, h = self.requisicao(cliente,'/api/cadastro',{'nome':f'Pessoa {i}','email':f'pessoa{i}@example.com','senha':'Senha longa segura 123!'},ip=f'192.0.2.{i+10}')
+            self.assertEqual(status,200,dados)
+            cookie = h['Set-Cookie']
+            for parte in ['__Host-sessao=', 'HttpOnly', 'Secure', 'SameSite=Strict', 'Path=/']:
+                self.assertIn(parte, cookie)
+            self.assertNotIn('sessao',dados)
+            tokens.append(cookie.split(';')[0])
+        self.assertEqual(self.requisicao(cliente,'/api/painel')[0],401)
+        self.assertEqual(self.requisicao(cliente,'/api/questoes/1',{'alternativa':2,'conta':2},cookie=tokens[0])[0],200)
+        self.assertEqual(self.requisicao(cliente,'/api/painel?conta=1',cookie=tokens[1])[1]['progresso']['total'],0)
+        self.assertEqual(self.requisicao(cliente,'/api/painel',cookie=tokens[0])[1]['progresso']['total'],1)
+        self.assertEqual(self.requisicao(cliente,'/api/painel',cookie='__Host-sessao=inventada')[0],401)
+        # Em produção, o nome de cookie local não concede sessão.
+        self.assertEqual(self.requisicao(cliente,'/api/painel',cookie=tokens[0].replace('__Host-sessao','sessao'))[0],401)
+        self.assertEqual(self.requisicao(cliente,'/api/sair',{},cookie=tokens[0])[0],200)
+        self.assertEqual(self.requisicao(cliente,'/api/painel',cookie=tokens[0])[0],401)
+        with closing(sqlite3.connect(Path(self.pasta.name)/'estudos.sqlite3')) as con, con:
+            con.execute('UPDATE sessoes SET expira=0')
+        self.assertEqual(self.requisicao(cliente,'/api/painel',cookie=tokens[1])[0],401)
+
+    def test_abuso_nao_bloqueia_outro_ip(self):
+        cliente = self.cliente()
+        for _ in range(10):
+            self.assertEqual(self.requisicao(cliente,'/api/entrar',{'email':'alvo@example.com','senha':'Senha longa segura 123!'},ip='192.0.2.80')[0],401)
+        self.assertEqual(self.requisicao(cliente,'/api/entrar',{'email':'alvo@example.com','senha':'Senha longa segura 123!'},ip='192.0.2.80')[0],429)
+        self.assertEqual(self.requisicao(cliente,'/api/entrar',{'email':'alvo@example.com','senha':'Senha longa segura 123!'},ip='192.0.2.81')[0],401)
+        for i in range(30):
+            self.assertEqual(self.requisicao(cliente,'/api/entrar',{'email':f'outro{i}@example.com','senha':'Senha longa segura 123!'},ip='192.0.2.82')[0],401)
+        status,_,h = self.requisicao(cliente,'/api/entrar',{'email':'fim@example.com','senha':'Senha longa segura 123!'},ip='192.0.2.82')
+        self.assertEqual(status,429);self.assertIn('Retry-After',h)
+        self.assertEqual(self.requisicao(cliente,'/api/entrar',{'email':'livre@example.com','senha':'Senha longa segura 123!'},ip='192.0.2.83')[0],401)
+
+    def test_hash_antigo_atualizado_sem_perder_conta(self):
+        import sqlite3,hashlib
+        sal='aa'*16
+        senha='Senha longa antiga 123!'
+        antigo=hashlib.scrypt(senha.encode(),salt=bytes.fromhex(sal),n=16384,r=8,p=1).hex()
+        with closing(sqlite3.connect(Path(self.pasta.name)/'estudos.sqlite3')) as con, con:
+            con.execute('INSERT INTO contas(nome,email,sal,senha) VALUES(?,?,?,?)',('Legado','legado@example.com',sal,antigo))
+        self.assertEqual(self.requisicao(self.cliente(),'/api/entrar',{'email':'legado@example.com','senha':senha},ip='192.0.2.90')[0],200)
+        with closing(sqlite3.connect(Path(self.pasta.name)/'estudos.sqlite3')) as con, con:
+            self.assertTrue(con.execute('SELECT senha FROM contas WHERE email=?',('legado@example.com',)).fetchone()[0].startswith('scrypt$32768$8$3$'))
 
 if __name__=='__main__':
     unittest.main(verbosity=2)
