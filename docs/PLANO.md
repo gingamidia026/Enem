@@ -13,3 +13,7 @@ Direção: menu lateral no computador, navegação em linha no celular, tarefa d
 Pendências para eventual acesso externo: forma de conexão restrita à aplicação e domínio, política de privacidade/retenção e conteúdo pedagógico definitivo. Professores, redação e catálogo completo dependem da definição de escopo. Não habilitar acesso público antes de HTTPS e revisão operacional.
 
 09/11/2026 · Dominique-Oliveira-ChatGPT🤖💚 · Login teste / 123 habilitado no Compose local, comandos de ciclo de vida e instalador do atalho. Manter as funcionalidades existentes e o banco no PC; não inferir mudança para hospedagem externa.
+
+## Direção atual de acesso público
+
+09/11/2026 · Dominique-Oliveira-ChatGPT🤖💚 · Interface do Pages sem localhost, visual baseado nos princípios de Emil Kowalski e intermediário com fila transitória. O PC inicia somente conexão de saída por contêiner dedicado, sem terminal, pastas pessoais ou socket Docker. Aplicação e histórico continuam no volume local. A ferramenta Sites bloqueou a ativação pública por exigir aprovação incompatível com a política never. A interface indica indisponibilidade e a conexão permanece desativada; não declarar o acesso de terceiros concluído. Ver DIRECAO-E-ACESSO-PUBLICO.md.

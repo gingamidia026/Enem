@@ -10,7 +10,13 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.13'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '26'
       - run: python tests/testar.py
+      - run: node tests/intermediario.mjs
+      - run: bash conexao-publica/scripts/build.sh && node conexao-publica/scripts/validate-artifact.mjs
+      - run: docker compose -f compose.yaml -f compose.publico.yaml config --quiet
       - run: docker compose config --quiet
       - run: DOMINIO=estudo.example.com docker compose -f compose.producao.yaml config --quiet
       - run: docker build -t enem-verificacao .

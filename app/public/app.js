@@ -4,28 +4,53 @@ const aviso = document.querySelector('#aviso');
 const menu = document.querySelector('#menu');
 let painel = null;
 let cadastro = false;
-let perfilTeste = false;
+const publico = document.documentElement.dataset.publico === '1';
+const conexao = window.ENEM_PUBLICO || {};
+let sessao = '';
+let perfilTeste = publico;
 let simulado = null;
 const escapar = valor => String(valor).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+async function transportar(caminho, dados) {
+  if (!publico) {
+    const resposta = await fetch(caminho, dados === undefined ? {} : {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(dados)});
+    return {status:resposta.status,dados:await resposta.json()};
+  }
+  if (!conexao.habilitado || !/^https:\/\/[^/]+$/.test(conexao.intermediario || '')) throw new Error('O acesso público está em configuração. Ainda não é possível entrar.');
+  const envio = await fetch(conexao.intermediario + '/pedido', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({metodo:dados===undefined?'GET':'POST',caminho,dados,token:sessao}),signal:AbortSignal.timeout(12000)});
+  const recibo = await envio.json();
+  if(!envio.ok) throw new Error(recibo.erro || 'A plataforma está temporariamente indisponível.');
+  const limite = Date.now() + 30000;
+  while(Date.now()<limite) {
+    await new Promise(r=>setTimeout(r,500));
+    const resposta = await fetch(conexao.intermediario + '/resultado/' + recibo.id, {headers:{Authorization:'Bearer '+recibo.recibo},signal:AbortSignal.timeout(10000)});
+    const corpo = await resposta.json();
+    if(resposta.status===202) continue;
+    if(!resposta.ok) throw new Error(corpo.erro || 'Não foi possível consultar a resposta.');
+    return corpo;
+  }
+  throw new Error('A resposta demorou mais que o esperado. Tente novamente.');
+}
 async function api(caminho, dados) {
-  const resposta = await fetch(caminho, dados === undefined ? {} : {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(dados)});
-  const resultado = await resposta.json();
-  if (!resposta.ok) {
-    if (resposta.status === 401 && painel) { painel = null; simulado = null; login(); }
+  const resposta = await transportar(caminho,dados);
+  const resultado = resposta.dados;
+  if(resposta.status>=400) {
+    if(resposta.status===401 && painel){painel=null;sessao='';simulado=null;login();}
     throw new Error(resultado.erro || 'Não foi possível concluir. Tente novamente.');
   }
+  if(resultado.sessao){sessao=resultado.sessao;delete resultado.sessao;}
+  if(caminho==='/api/sair')sessao='';
   return resultado;
 }
 function erro(e) { aviso.textContent = e.message || 'Falha de conexão. Tente novamente.'; }
 function tela(html) { aviso.textContent = ''; conteudo.innerHTML = html; }
 function login() {
   menu.hidden = true;
-  tela(`<div class="acesso"><section class="formulario"><h1>${cadastro ? 'Crie seu espaço' : 'Entre para estudar'}</h1><p>Questões, simulado e seu progresso em um só lugar.</p><form id="acesso">${cadastro ? '<label for="nome">Como você se chama?</label><input id="nome" name="nome" autocomplete="name" minlength="2" maxlength="80" required>' : ''}<label for="email">${cadastro ? 'E-mail' : 'Login'}</label><input id="email" name="email" type="${cadastro ? 'email' : 'text'}" autocomplete="username" maxlength="232" spellcheck="false" required><label for="senha">Senha</label><input id="senha" name="senha" type="password" autocomplete="${cadastro ? 'new-password' : 'current-password'}" minlength="${cadastro ? 12 : 1}" maxlength="128" required><small>${cadastro ? 'Use de 12 a 128 caracteres.' : 'Digite sua senha para entrar.'}</small><button type="submit">${cadastro ? 'Criar conta' : 'Entrar'}</button></form>${!cadastro && perfilTeste ? '<p class="nota">Perfil de teste: login <strong>teste</strong> e senha <strong>123</strong>.</p>' : ''}<button class="discreto troca" id="trocar">${cadastro ? 'Já tenho uma conta' : 'Quero criar uma conta'}</button><p><small>Guardamos seu nome, e-mail e respostas para mostrar seu progresso. Use dados de teste nesta versão inicial.</small></p></section></div>`);
+  tela(`<div class="acesso"><section class="formulario"><h1>${cadastro ? 'Crie seu espaço' : 'Entre para estudar'}</h1><p>Continue seus estudos, no seu ritmo.</p>${publico && !conexao.habilitado ? '<p class="nota" role="status">O acesso público está em configuração. Ainda não é possível entrar.</p>' : ''}<form id="acesso">${cadastro ? '<label for="nome">Como você se chama?</label><input id="nome" name="nome" autocomplete="name" minlength="2" maxlength="80" required>' : ''}<label for="email">${cadastro ? 'E-mail' : 'Login'}</label><input id="email" name="email" type="${cadastro ? 'email' : 'text'}" autocomplete="username" maxlength="232" spellcheck="false" required><label for="senha">Senha</label><input id="senha" name="senha" type="password" autocomplete="${cadastro ? 'new-password' : 'current-password'}" minlength="${cadastro ? 12 : 1}" maxlength="128" required><small>${cadastro ? 'Use de 12 a 128 caracteres.' : 'Digite sua senha para entrar.'}</small><button type="submit" ${publico && !conexao.habilitado ? 'disabled' : ''}>${cadastro ? 'Criar conta' : 'Entrar'}</button></form>${!cadastro && perfilTeste ? '<p class="nota">Perfil de teste: login <strong>teste</strong> e senha <strong>123</strong>.</p>' : ''}<button class="discreto troca" id="trocar">${cadastro ? 'Já tenho uma conta' : 'Quero criar uma conta'}</button><p><small>Guardamos seu nome, e-mail e respostas para mostrar seu progresso. Use dados de teste nesta versão inicial.</small></p></section></div>`);
   document.querySelector('#trocar').onclick = () => { cadastro = !cadastro; login(); };
   document.querySelector('#acesso').onsubmit = async evento => {
     evento.preventDefault(); const form = evento.currentTarget; const botao = form.querySelector('button');
-    botao.disabled = true; aviso.textContent = 'Conectando…';
-    try { await api(cadastro ? '/api/cadastro' : '/api/entrar', Object.fromEntries(new FormData(form))); await atualizar(); navegar(); } catch(e) { erro(e); } finally { botao.disabled = false; }
+    botao.disabled = true; botao.textContent = cadastro ? 'Criando conta…' : 'Entrando…'; aviso.textContent = '';
+    try { await api(cadastro ? '/api/cadastro' : '/api/entrar', Object.fromEntries(new FormData(form))); await atualizar(); navegar(); } catch(e) { erro(e); } finally { botao.disabled = false; botao.textContent = cadastro ? 'Criar conta' : 'Entrar'; }
   };
 }
 async function atualizar() { painel = await api('/api/painel'); menu.hidden = false; }
@@ -70,9 +95,17 @@ async function abrir(id) {
 }
 document.querySelector('#sair').onclick=async()=>{try {await api('/api/sair',{}); painel=null;simulado=null;login();}catch(e){erro(e);}};
 window.addEventListener('hashchange',navegar);
-api('/api/configuracao').then(config => { perfilTeste = config.perfilTeste; return atualizar(); }).then(navegar).catch(e=>{login(); if(!e.message.includes('Entre na sua conta'))erro(e);});
+login();
+if (publico) {
+  if (conexao.habilitado) api('/api/configuracao').then(config=>{perfilTeste=config.perfilTeste;}).catch(erro);
+} else {
+  api('/api/configuracao').then(config => { perfilTeste = config.perfilTeste; return atualizar(); }).then(navegar).catch(e=>{login(); if(!e.message.includes('Entre na sua conta'))erro(e);});
+}
 // Navegar também quando o destino já é a seção selecionada.
 document.addEventListener('click', evento => {
   const link = evento.target.closest('a[href^="#"]');
   if (link && ['#inicio','#questoes','#simulado','#progresso'].includes(link.hash) && link.hash === location.hash) { evento.preventDefault(); navegar(); }
 });
+
+document.addEventListener('pointerdown',()=>{document.documentElement.dataset.entrada='ponteiro';});
+document.addEventListener('keydown',()=>{document.documentElement.dataset.entrada='teclado';});

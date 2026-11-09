@@ -55,15 +55,23 @@ class Testes(unittest.TestCase):
         class Recursos(HTMLParser):
             def handle_starttag(self, tag, atributos):
                 dados = dict(atributos)
-                if tag == 'link' and dados.get('rel') == 'stylesheet':
-                    self.css = dados['href']
-                if tag == 'a' and dados.get('href') == 'http://localhost:8088/':
-                    self.login_local = True
-        recursos = Recursos(); recursos.feed(pagina)
+                if tag == 'link' and dados.get('rel') == 'stylesheet': self.css=dados['href']
+                if tag == 'script' and dados.get('src'): self.scripts.append(dados['src'])
+        recursos=Recursos();recursos.scripts=[];recursos.feed(pagina)
         self.assertTrue((RAIZ/recursos.css).is_file())
-        self.assertTrue(recursos.login_local)
-        self.assertNotIn('src="/app.js"', pagina)
+        for script in recursos.scripts: self.assertTrue((RAIZ/script).is_file())
+        self.assertNotIn('localhost',pagina)
+        self.assertNotIn('Abrir login neste computador',pagina)
+        self.assertIn('data-publico="1"',pagina)
         self.assertTrue((RAIZ/'.nojekyll').exists())
+    def test_conector_recusa_comandos_e_arquivos(self):
+        import runpy
+        conector=runpy.run_path(str(RAIZ/'conector/conector.py'))
+        for metodo,caminho in [('GET','/etc/passwd'),('POST','/api/terminal'),('GET','http://outro.example/'),('GET','/api/questoes/../../dados'),('DELETE','/api/painel')]:
+            self.assertFalse(conector['permitido'](metodo,caminho))
+            self.assertEqual(conector['executar']({'metodo':metodo,'caminho':caminho})['status'],403)
+        self.assertTrue(conector['permitido']('GET','/api/painel'))
+        self.assertTrue(conector['permitido']('POST','/api/questoes/1'))
     def test_fluxo_e_isolamento(self):
         a,b=self.cliente(),self.cliente()
         self.assertEqual(self.pedido(a,'/api/painel')[0],401)

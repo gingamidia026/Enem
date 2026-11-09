@@ -4,3 +4,6 @@ dados/
 __pycache__/
 *.pyc
 node_modules/
+.segredos/
+conexao-publica/dist/
+conexao-publica/.sites/

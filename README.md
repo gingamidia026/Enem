@@ -1,86 +1,75 @@
 # ENEM • Espaço de estudo
 
-Plataforma independente de estudo, com Docker e dados mantidos no PC da Dominique, em volume local exclusivo. Criada a pedido de Dominique Oliveira.
+Aplicação de estudo com Docker, contas e histórico no PC da Dominique. Autora: Dominique-Oliveira-ChatGPT🤖💚.
 
-## O que funciona nesta primeira versão
+## Estado atual
 
-- Tela de login com perfil **Teste**: login `teste`, senha `123`.
-- Cadastro separado de contas individuais com senha de 12 a 128 caracteres.
-- Treino por área do conhecimento e explicação após responder.
-- Simulado curto com quatro questões autorais demonstrativas.
-- Histórico individual de tentativas e acertos persistido em SQLite.
-- Interface responsiva com navegação por teclado.
+- Funcionam na instalação local: perfil Teste (`teste` / `123`), cadastro individual, treino por área, explicação, simulado curto e progresso persistente.
+- A interface pública é publicada no GitHub Pages, com o mesmo visual da aplicação. Não contém links para localhost.
+- A conexão pública está **preparada, mas desativada**. A ferramenta Sites recusou mudar o intermediário de privado para público porque exige aprovação e a política da sessão não permite aprovações. Não há conexão pública funcional com o PC neste estado.
+- O login público mostra uma mensagem de configuração e não autentica pessoas enquanto essa dependência existir. Não há simulação de login nem armazenamento alternativo no navegador.
 
-As questões iniciais são demonstrações, não provas oficiais do Inep. O percentual de acerto não é nota TRI. Ainda não há banco completo, professores, recuperação de senha, verificação de e-mail, redação ou correção por IA. O simulado em andamento fica na memória da página; as respostas já enviadas ficam salvas no servidor.
+Quatro questões autorais demonstrativas, sem vínculo com o Inep e sem cálculo TRI. Ainda não há banco oficial completo, professores, redação, recuperação de senha ou verificação de e-mail. O perfil Teste é compartilhado; contas individuais têm seus históricos separados.
 
-## Como protege a separação do computador
+## Visual
 
-O navegador recebe interface, dados da conta autenticada, catálogo resumido e uma questão por vez. Gabarito e explicação são enviados somente depois da resposta. Tudo que chega ao navegador pode ser visto por quem o usa; não existe proteção absoluta contra cópia do conteúdo exibido.
+Aplicação das orientações de [Emil Kowalski](https://github.com/emilkowalski/skills): fundo claro, tons neutros, hierarquia contida, sombras discretas, pressão de botão de 140 ms, foco visível e preferência de movimento reduzido. Essa referência traz princípios de interface, não uma identidade de marca para copiar. Sem logos ou personagens de terceiros.
 
-A aplicação não monta o cofre, a pasta pessoal, a ponte da Ginga ou o socket Docker. Não há terminal nem execução de comandos pela API. O único volume de dados da aplicação é `estudos`, exclusivo deste projeto. Ela roda como usuário sem privilégios, com sistema de arquivos somente para leitura, capacidades removidas e rede Docker interna sem saída direta para a internet.
-
-O PC é o servidor desta instalação: guarda o banco e responde apenas às rotas da aplicação, sem oferecer acesso à área de trabalho, aos arquivos pessoais ou a comandos do sistema. Não há sincronização do banco com GitHub ou nuvem. O navegador recebe dados nas requisições e mantém em memória o que foi exibido; não salva o banco em armazenamento local do navegador. Docker compartilha o kernel do host e não garante isolamento absoluto. Não reutilize volumes ou a rede da plataforma dos funcionários.
-
-O acesso padrão é apenas neste PC, em `http://localhost:8088`. Acesso por outros aparelhos ou por um endereço público ainda não foi configurado. Isso exigirá uma conexão restrita à aplicação do PC; um site estático no GitHub não consegue consultar esse banco sozinho.
-
-## Ligar e parar pelo terminal
-
-Requer Docker Engine e Docker Compose.
+## Ligar e parar
 
 ```sh
 ./scripts/instalar-comando.sh
 enem
-```
-
-Abra `http://localhost:8088`. A porta é ligada apenas em `127.0.0.1`. Entre com login `teste` e senha `123`, ou cadastre uma conta individual. O perfil de teste é compartilhado: todas as pessoas que usarem essas credenciais verão o mesmo progresso. Ele é habilitado por `PERFIL_TESTE=1` no Compose local e fica desativado na configuração pública opcional. A plataforma dos funcionários não é alterada.
-
-```sh
-# Parar sem apagar os dados
 enem parar
-# Verificar saúde
-enem status
-# Outros comandos
 enem reiniciar
+enem status
 enem logs
-enem ajuda
-# Testes HTTP com banco descartável, sem dependências externas
-python3 tests/testar.py
 ```
 
-O instalador cria `~/.local/bin/enem` apontando para este projeto sem substituir um comando diferente já existente. Se a sessão não puder escrever nessa pasta, execute o instalador no seu terminal. Antes da instalação, os mesmos comandos funcionam com `./enem` dentro da pasta do projeto. Parar e reiniciar preservam o volume e o histórico. `enem` inicia somente o ENEM; não liga a ponte ou a plataforma dos funcionários.
+O instalador cria o atalho em `~/.local/bin` sem substituir outro comando. A sessão de desenvolvimento não pôde escrever nessa pasta; execute o instalador no terminal da Dominique. Antes disso, use `./enem` dentro deste projeto. A instalação local abre em `http://localhost:8088`, apenas para administração e testes neste PC. Parar e reiniciar preservam o volume.
 
-## Alternativa futura: hospedar em servidor separado com HTTPS
+## Acesso público sem portas abertas no PC
 
-Esta alternativa muda o local do banco para o servidor escolhido. Não faz parte da instalação local solicitada e não foi ativada.
+Fluxo implementado em código, ainda não ativado:
 
-1. Provisione um servidor Linux próprio para o ENEM, com Docker e Compose; use acesso administrativo por chave e mantenha o sistema atualizado.
-2. Aponte o DNS do domínio escolhido para esse servidor. Libere as portas 80 e 443; não exponha Docker, banco ou porta 8000.
-3. Clone o repositório no servidor e execute, substituindo o domínio de exemplo:
+1. Navegador acessa somente o GitHub Pages e o intermediário HTTPS público.
+2. O intermediário valida a origem e permite somente operações de cadastro, login, questões, respostas e progresso. Ele coloca o pedido em uma fila temporária.
+3. O contêiner `conector` do PC inicia uma conexão HTTPS de saída e retira os pedidos. Não escuta portas e não recebe URLs ou comandos arbitrários.
+4. O conector consulta apenas as rotas permitidas da aplicação, na rede Docker interna, e envia o resultado ao intermediário.
+5. O navegador recebe apenas sua resposta, mediante recibo imprevisível de uso único. A sessão de estudo fica na memória da página; atualizar a página exige novo login.
+
+O visitante não recebe endereço IP do PC, link local, banco, cofre, terminal, socket Docker ou área de trabalho. O conector não monta o banco; monta somente sua chave individual em leitura. A aplicação monta apenas o próprio volume `estudos`. Docker reduz privilégios, mas não garante isolamento absoluto do kernel ou proteção contra toda vulnerabilidade.
+
+### Dados em trânsito e limites
+
+Contas, hashes de senha e histórico persistente ficam no SQLite local. Para transportar operações, o intermediário precisa receber temporariamente os campos enviados pelo navegador, incluindo credenciais de login, e as respostas da aplicação. HTTPS protege o transporte; a fila não tem criptografia adicional em repouso. Não afirmar que nenhum dado passa ou existe fora do PC.
+
+Pedidos são válidos por 35 segundos. O payload do pedido é limpo após a retirada pelo conector; o resultado é excluído quando o navegador o consome. Registros expirados são limpos no próximo processamento, não por um relógio de exclusão garantida. Limites do intermediário: 60 pedidos/minuto por hash do IP e 100 registros na fila. Nenhum IP bruto é gravado pela aplicação, mas o provedor pode manter seus próprios registros de infraestrutura. O banco local não está criptografado em disco.
+
+A ausência do conector deve aparecer como indisponibilidade temporária. Um PC desligado não pode atender visitantes; manter o volume local não oferece disponibilidade quando ele está offline. Antes de uso com dados reais, revisar retenção, privacidade, menores, proteção contra abuso, backup e carga.
+
+## Ativação pendente
+
+O projeto do intermediário está registrado em `conexao-publica/.openai/hosting.json`. Seu código, migração e artefato foram preparados. A publicação pública foi bloqueada pela ferramenta; nenhum túnel ou porta alternativa foi aberto.
+
+Após uma sessão com capacidade de aprovar a mudança de público:
+
+1. Revisar e publicar o intermediário como público, com o binding D1 `DB` e a chave secreta `CHAVE_CONECTOR`.
+2. Provisionar a mesma chave no arquivo `.segredos/conector` deste PC, fora do Git. Manter o diretório em 0700 e o arquivo em leitura para o usuário do contêiner. Não copiar uma chave pública de exemplo.
+3. Ajustar a origem HTTPS verificada em `compose.publico.yaml` e em `configuracao-publica.js`; habilitar a configuração somente após teste externo.
+4. Criar `.segredos/ativado` e iniciar `enem`. A presença da chave sozinha não inicia a conexão pública.
+5. Conferir de outro aparelho o fluxo inteiro, o isolamento das contas, expiração e desligamento do PC antes de declarar o acesso público concluído.
+
+O `.env`, as chaves, o banco e o estado da sessão nunca devem ir para GitHub. O repositório contém código e conteúdo demonstrativo, não os dados operacionais.
+
+## Conferência
 
 ```sh
-DOMINIO=estudo.seu-dominio.com docker compose -f compose.producao.yaml up -d --build
+python3 tests/testar.py
+node tests/intermediario.mjs
+docker compose -f compose.yaml -f compose.publico.yaml config --quiet
+bash conexao-publica/scripts/build.sh
+node conexao-publica/scripts/validate-artifact.mjs
 ```
 
-O Caddy solicita certificado HTTPS. A origem é fixada no domínio e os cookies passam a exigir HTTPS. A aplicação só é acessível pelo proxy; o banco não tem porta de rede. Não execute a configuração de produção no computador pessoal.
-
-Publicar este repositório no GitHub publica o código; não hospeda a API ou o banco. GitHub Pages não executa este servidor.
-
-## Dados e operação
-
-Senhas são armazenadas com scrypt e sal individual. Sessões têm validade de 24 horas, token aleatório armazenado como resumo e cookie HttpOnly/SameSite. POST exige origem autorizada e JSON, com limite de tamanho. Não há CORS aberto. A autorização é verificada no servidor e o histórico é filtrado pela conta da sessão, não por um identificador enviado pelo navegador.
-
-Há limites persistentes por e-mail e limite global de autenticação. O global também pode bloquear usuários legítimos durante abuso; para público real, adicione proteção por IP no proxy/WAF, sem confiar cegamente em cabeçalhos fornecidos pelo cliente. O servidor limita conexões simultâneas e tempo de leitura; esta é uma base para operação pequena, sem teste de carga de produção.
-
-O banco não está criptografado em disco. Administradores do servidor e do Docker podem lê-lo. Use armazenamento e backups criptografados; restrinja o acesso administrativo. Não grave dados reais, `.env`, certificados ou backups no GitHub.
-
-Antes de abrir cadastros reais: revisar privacidade e retenção, tratamento de contas de menores, processo de exclusão/recuperação, verificação de e-mail, conteúdo pedagógico e capacidade do servidor. Não são recursos já implementados nesta versão.
-
-Para backup consistente, pare a aplicação e copie o banco do volume para armazenamento protegido com ferramentas de backup locais. Teste a restauração em uma instalação separada antes de depender desse backup. Nunca use `docker compose down -v` para uma parada comum: essa opção remove os volumes e seus dados.
-
-Detalhes da direção e escopo em [docs/PLANO.md](docs/PLANO.md). Autoria: Dominique-Oliveira-ChatGPT🤖💚.
-
-## Página de entrada no GitHub Pages
-
-`https://gingamidia026.github.io/Enem/` publica o `index.html` da raiz, com estilos relativos. O botão **Abrir login neste computador** leva à aplicação em `http://localhost:8088/`, onde você digita `teste` / `123` e usa as funções existentes. Ligue o contêiner antes. O GitHub não recebe o banco nem a senha desse login.
-
-Em outro aparelho, `localhost` aponta para aquele aparelho, não para o PC da Dominique. A conexão externa com a aplicação do PC ainda não está configurada. A página estática não simula uma conexão com o banco nem uma autenticação inexistente. A aplicação abre no endereço local; não permanece no domínio do Pages.
+O teste do intermediário usa SQLite em memória, sem acessar dados ou serviços reais. O teste de navegador opcional está em `tests/navegador.cjs`. Detalhes e limites em `docs/VERIFICACAO.md`.

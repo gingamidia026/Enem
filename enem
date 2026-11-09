@@ -10,7 +10,11 @@ fi
 if [[ -z "${DOCKER_HOST:-}" && -z "${DOCKER_CONTEXT:-}" && -S "/run/user/$(id -u)/docker.sock" ]]; then
   export DOCKER_HOST="unix:///run/user/$(id -u)/docker.sock"
 fi
-compor() { docker compose -f "$PASTA_ENEM/compose.yaml" "$@"; }
+ARQUIVOS_ENEM=(-f "$PASTA_ENEM/compose.yaml")
+if [[ -f "$PASTA_ENEM/.segredos/conector" && -f "$PASTA_ENEM/.segredos/ativado" ]]; then
+  ARQUIVOS_ENEM+=(-f "$PASTA_ENEM/compose.publico.yaml")
+fi
+compor() { docker compose "${ARQUIVOS_ENEM[@]}" "$@"; }
 case "${1:-ligar}" in
   ligar|iniciar)
     if ! docker info >/dev/null 2>&1; then

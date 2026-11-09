@@ -30,3 +30,25 @@ Correção de arquitetura: dados permanecem no volume Docker deste PC, sem sincr
 ## Correção do endereço GitHub Pages
 
 09/11/2026 · Dominique-Oliveira-ChatGPT🤖💚 · Entrada estática na raiz com CSS relativo e botão para a aplicação local. Teste automatizado verifica arquivo, recurso CSS e destino do login. Não exportar o banco nem simular uma conexão remota. O fluxo de login permanece na origem local, preservando os controles de origem existentes. Limite: acesso pelo botão só funciona no aparelho que executa o contêiner; outros aparelhos exigem conexão adicional.
+
+## Visual Emil e conexão somente de saída
+
+09/11/2026 · Dominique-Oliveira-ChatGPT🤖💚.
+
+- Seis testes HTTP/arquivos/lista de rotas aprovados. O conector recusa caminhos de arquivos, terminal, URLs externas, métodos arbitrários e travessia de diretórios.
+- Worker testado contra SQLite em memória: origem permitida, autenticação do conector, lista de operações, indisponibilidade offline, retirada única, recibo imprevisível, resultado consumido e limpeza de expirados.
+- Imagem Docker do conector construída; configuração Compose com rede de saída validada. O serviço não foi iniciado: ativação exige marcador explícito e confirmação do intermediário público.
+- Chrome: fluxo local completo com o novo visual; Pages sem link local e com aviso de indisponibilidade. Transporte público simulado para testar a interface contra API local real. Isso não é teste de conexão pública hospedada.
+- Publicação do intermediário bloqueada: a ferramenta `sites.update_site_access` informou que precisa de aprovação, mas a política da sessão é `never`. Não houve tentativa por API alternativa ou abertura de porta/túnel para contornar isso. Site público mantém o login indisponível de forma explícita.
+
+### Revisão visual conforme a referência solicitada
+
+| Antes | Depois | Motivo |
+| --- | --- | --- |
+| Verde e título amplo | Neutros e título contido | Facilitar o uso frequente do aplicativo |
+| Contornos e preenchimentos fortes | Sombras suaves e contraste de texto | Reduzir peso visual |
+| Clique sem indicação | Pressão de 140 ms no ponteiro | Confirmar a ação de forma breve |
+| Mesmo efeito para todo dispositivo | Teclado sem animação e hover só no mouse | Evitar demora e estados presos no toque |
+| Entrada pelo localhost | Interface pública sem endereço do PC | Não confundir acesso remoto com acesso local |
+
+Referência: https://github.com/emilkowalski/skills. Foram aplicados princípios; não foi copiada uma marca de terceiros.
