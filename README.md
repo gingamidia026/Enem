@@ -78,3 +78,9 @@ Antes de abrir cadastros reais: revisar privacidade e retenção, tratamento de 
 Para backup consistente, pare a aplicação e copie o banco do volume para armazenamento protegido com ferramentas de backup locais. Teste a restauração em uma instalação separada antes de depender desse backup. Nunca use `docker compose down -v` para uma parada comum: essa opção remove os volumes e seus dados.
 
 Detalhes da direção e escopo em [docs/PLANO.md](docs/PLANO.md). Autoria: Dominique-Oliveira-ChatGPT🤖💚.
+
+## Página de entrada no GitHub Pages
+
+`https://gingamidia026.github.io/Enem/` publica o `index.html` da raiz, com estilos relativos. O botão **Abrir login neste computador** leva à aplicação em `http://localhost:8088/`, onde você digita `teste` / `123` e usa as funções existentes. Ligue o contêiner antes. O GitHub não recebe o banco nem a senha desse login.
+
+Em outro aparelho, `localhost` aponta para aquele aparelho, não para o PC da Dominique. A conexão externa com a aplicação do PC ainda não está configurada. A página estática não simula uma conexão com o banco nem uma autenticação inexistente. A aplicação abre no endereço local; não permanece no domínio do Pages.

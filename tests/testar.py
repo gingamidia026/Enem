@@ -49,6 +49,21 @@ class Testes(unittest.TestCase):
         self.assertEqual(status,200,dados)
         self.assertIn('HttpOnly',cabecalhos['Set-Cookie'])
         self.assertIn('SameSite=Strict',cabecalhos['Set-Cookie'])
+    def test_entrada_pages_publicavel(self):
+        from html.parser import HTMLParser
+        pagina = (RAIZ/'index.html').read_text()
+        class Recursos(HTMLParser):
+            def handle_starttag(self, tag, atributos):
+                dados = dict(atributos)
+                if tag == 'link' and dados.get('rel') == 'stylesheet':
+                    self.css = dados['href']
+                if tag == 'a' and dados.get('href') == 'http://localhost:8088/':
+                    self.login_local = True
+        recursos = Recursos(); recursos.feed(pagina)
+        self.assertTrue((RAIZ/recursos.css).is_file())
+        self.assertTrue(recursos.login_local)
+        self.assertNotIn('src="/app.js"', pagina)
+        self.assertTrue((RAIZ/'.nojekyll').exists())
     def test_fluxo_e_isolamento(self):
         a,b=self.cliente(),self.cliente()
         self.assertEqual(self.pedido(a,'/api/painel')[0],401)
