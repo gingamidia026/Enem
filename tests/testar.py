@@ -58,8 +58,8 @@ class Testes(unittest.TestCase):
                 if tag == 'link' and dados.get('rel') == 'stylesheet': self.css=dados['href']
                 if tag == 'script' and dados.get('src'): self.scripts.append(dados['src'])
         recursos=Recursos();recursos.scripts=[];recursos.feed(pagina)
-        self.assertTrue((RAIZ/recursos.css).is_file())
-        for script in recursos.scripts: self.assertTrue((RAIZ/script).is_file())
+        self.assertTrue((RAIZ/urllib.parse.urlsplit(recursos.css).path).is_file())
+        for script in recursos.scripts: self.assertTrue((RAIZ/urllib.parse.urlsplit(script).path).is_file())
         self.assertNotIn('localhost',pagina)
         self.assertNotIn('Abrir login neste computador',pagina)
         self.assertIn('data-publico="1"',pagina)
