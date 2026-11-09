@@ -12,7 +12,7 @@ let sessao = '';
 function guardarSessao(token) {
   sessao = token;
   try {
-    if (token) localStorage.setItem(chaveSessao, JSON.stringify({token, expira:Date.now()+86400000}));
+    if (token) localStorage.setItem(chaveSessao, JSON.stringify({token, expira:Date.now()+30*86400000}));
     else localStorage.removeItem(chaveSessao);
   } catch { /* Navegadores com armazenamento bloqueado mantêm a sessão na página. */ }
 }
@@ -88,10 +88,11 @@ function login() {
   document.querySelector('#acesso').onsubmit = async evento => {
     evento.preventDefault(); const form = evento.currentTarget; const botao = form.querySelector('button');
     botao.disabled = true; botao.setAttribute('aria-busy','true'); form.setAttribute('aria-busy','true'); document.querySelector('#erro-acesso').textContent=''; botao.textContent = cadastro ? 'Criando conta…' : 'Entrando…'; aviso.textContent = '';
-    try { await api(cadastro ? '/api/cadastro' : '/api/entrar', Object.fromEntries(new FormData(form))); await atualizar(); navegar(); } catch(e) { document.querySelector('#erro-acesso').textContent = mensagemErro(e); } finally { form.removeAttribute('aria-busy'); botao.removeAttribute('aria-busy'); botao.disabled = false; botao.textContent = cadastro ? 'Criar conta' : 'Entrar'; }
+    try { const entrada = await api(cadastro ? '/api/cadastro' : '/api/entrar', Object.fromEntries(new FormData(form))); if(entrada.painel) mostrarPainel(entrada.painel); else await atualizar(); navegar(); } catch(e) { document.querySelector('#erro-acesso').textContent = mensagemErro(e); } finally { form.removeAttribute('aria-busy'); botao.removeAttribute('aria-busy'); botao.disabled = false; botao.textContent = cadastro ? 'Criar conta' : 'Entrar'; }
   };
 }
-async function atualizar() { painel = await api('/api/painel'); menu.hidden = false; document.body.classList.remove('sem-sessao'); }
+function mostrarPainel(dados) { painel = dados; menu.hidden = false; document.body.classList.remove('sem-sessao'); }
+async function atualizar() { mostrarPainel(await api('/api/painel')); }
 function indicadores() { const {total, acertos} = painel.progresso; return `<div class="indicadores"><div class="indicador"><strong>${total}</strong><span>respostas enviadas</span></div><div class="indicador"><strong>${acertos}</strong><span>acertos registrados</span></div><div class="indicador"><strong>${total ? Math.round(acertos / total * 100) + '%' : '—'}</strong><span>acerto nas tentativas</span>${total ? `<progress aria-label="Proporção de acertos nas tentativas" value="${acertos}" max="${total}"></progress>` : ''}</div></div>`; }
 function navegar() {
   if (!painel) return login();
@@ -113,7 +114,8 @@ function navegar() {
 }
 async function abrir(id) {
   aviso.textContent = 'Carregando questão…';
-  const q = await api('/api/questoes/' + id);
+  const conhecida = painel?.questoes.find(q=>q.id===id);
+  const q = conhecida?.enunciado && conhecida?.alternativas ? conhecida : await api('/api/questoes/' + id);
   tela(`<section class="questao" aria-label="Folha de questões"><div class="cabecalho-prova"><strong>Pé na Universidade</strong><span>${simulado ? 'Simulado curto' : 'Caderno de prática'}</span></div><p class="dados-questao">${escapar(q.area)}${simulado ? ` · Questão ${simulado.indice+1} de ${simulado.ids.length}` : ''}</p><h1>${escapar(q.titulo)}</h1><p class="enunciado">${escapar(q.enunciado)}</p><form id="responder"><fieldset><legend>Selecione sua resposta</legend>${q.alternativas.map((a,i)=>`<label class="alternativa"><input type="radio" name="alternativa" value="${i}" required><span>${String.fromCharCode(65+i)}. ${escapar(a)}</span></label>`).join('')}</fieldset><button type="submit">Conferir resposta</button></form><div id="resultado" aria-live="polite"></div></section>`);
   document.querySelector('#responder').onsubmit=async evento=>{
     evento.preventDefault(); const form=evento.currentTarget; const botao=form.querySelector('button'); botao.disabled=true; botao.setAttribute('aria-busy','true'); botao.textContent='Conferindo…';
@@ -140,9 +142,12 @@ async function abrir(id) {
 }
 document.querySelector('#sair').onclick=async()=>{try {await api('/api/sair',{}); painel=null;simulado=null;login();}catch(e){erro(e);}};
 window.addEventListener('hashchange',navegar);
-login();
+if (publico && conexao.habilitado && sessao) {
+  menu.hidden = true; document.body.classList.add('sem-sessao');
+  tela('<p role="status">Retomando seus estudos…</p>');
+} else login();
 if (publico) {
-  if (conexao.habilitado && sessao) atualizar().then(navegar).catch(e=>{if(sessao)erro(e);});
+  if (conexao.habilitado && sessao) atualizar().then(navegar).catch(e=>{if(sessao){tela('<p>Não foi possível retomar agora.</p><button id="retomar">Tentar novamente</button>');document.querySelector('#retomar').onclick=()=>atualizar().then(navegar).catch(erro);erro(e);}});
 } else {
   api('/api/configuracao').then(config => { perfilTeste = config.perfilTeste; return atualizar(); }).then(navegar).catch(e=>{login(); if(!e.message.includes('Entre na sua conta'))erro(e);});
 }

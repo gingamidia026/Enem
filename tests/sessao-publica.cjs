@@ -5,8 +5,8 @@ const fs=require('node:fs');const path=require('node:path');
 (async()=>{
  const navegador=await chromium.launch({executablePath:'/opt/google/chrome/chrome',headless:true,args:['--no-sandbox']});
  const contexto=await navegador.newContext(); const pagina=await contexto.newPage();
- const token='sessao_simulada_de_teste_1234567890';let revogada=false;let redeFalhou=false;let pendente;
- const painel={conta:{nome:'Teste'},questoes:[],progresso:{total:0,acertos:0}};
+ const token='sessao_simulada_de_teste_1234567890';let revogada=false;let redeFalhou=false;let pendente;let pedidos=0;
+ const painel={conta:{nome:'Teste'},questoes:[{id:1,area:'Matemática',titulo:'Questão de teste',enunciado:'Quanto é um mais um?',alternativas:['Um','Dois']}],progresso:{total:0,acertos:0}};
  await contexto.route('https://pu.gingamidia.com/**',async rota=>{
   const url=new URL(rota.request().url());const arquivo=url.pathname==='/'?'index.html':url.pathname.slice(1);
   if(!['index.html','configuracao-publica.js','app/public/app.js','app/public/estilo.css','app/public/textura.svg'].includes(arquivo)) return rota.fulfill({status:404,body:''});
@@ -15,11 +15,11 @@ const fs=require('node:fs');const path=require('node:path');
  await contexto.route('https://enem-ginga-conexao.sabrinaconradoadv.chatgpt.site/**',async rota=>{
   if(redeFalhou)return rota.abort('failed');
   if(rota.request().url().endsWith('/pedido')){
-   pendente=rota.request().postDataJSON();
+   pedidos++;pendente=rota.request().postDataJSON();
    return rota.fulfill({json:{id:'simulado',recibo:'simulado'}});
   }
   let dados,status=200;
-  if(pendente.caminho==='/api/entrar') {revogada=false;dados={sessao:token};}
+  if(pendente.caminho==='/api/entrar') {revogada=false;dados={sessao:token,painel};}
   else if(pendente.caminho==='/api/sair') {revogada=true;dados={ok:true};}
   else if(pendente.caminho==='/api/painel' && pendente.token===token && !revogada)dados=painel;
   else {status=401;dados={erro:'Entre na sua conta para continuar.'};}
@@ -28,9 +28,15 @@ const fs=require('node:fs');const path=require('node:path');
  const inicio=()=>pagina.getByRole('heading',{name:'Vamos dar o próximo passo?'}).waitFor();
  const login=async()=>{await pagina.getByLabel('Login',{exact:true}).fill('teste');await pagina.getByLabel('Senha',{exact:true}).fill('123');await pagina.getByRole('button',{name:'Entrar',exact:true}).click();await inicio();};
  await pagina.goto('https://pu.gingamidia.com/');await login();
- assert(await pagina.evaluate(()=>!!localStorage.getItem('pu.sessao.v1')));
+ assert.equal(pedidos,1,'login não deve buscar painel em segunda viagem');
+ assert(await pagina.evaluate(()=>JSON.parse(localStorage.getItem('pu.sessao.v1')).expira>Date.now()+29*86400000));
+ await pagina.getByRole('link',{name:'Questões',exact:true}).click();
+ const antes=pedidos;await pagina.getByRole('button',{name:'Resolver questão'}).click();
+ await pagina.getByText('Quanto é um mais um?',{exact:true}).waitFor();
+ assert.equal(pedidos,antes,'abrir questão recebida dispensa rede');
+ await pagina.getByRole('link',{name:'Meu estudo',exact:true}).click();
  assert(!await pagina.evaluate(()=>localStorage.getItem('pu.sessao.v1').includes('senha')));
- await pagina.reload();await inicio();
+ await pagina.reload();assert.equal(await pagina.getByRole('heading',{name:'Entre para estudar'}).count(),0);await inicio();
  await pagina.close();const outra=await contexto.newPage();await outra.goto('https://pu.gingamidia.com/');await outra.getByText('Olá, Teste.',{exact:true}).waitFor();
  await outra.getByRole('button',{name:'Sair da conta'}).click();await outra.getByRole('heading',{name:'Entre para estudar'}).waitFor();
  assert.equal(await outra.evaluate(()=>localStorage.getItem('pu.sessao.v1')),null);

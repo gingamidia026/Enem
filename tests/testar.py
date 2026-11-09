@@ -47,6 +47,13 @@ class Testes(unittest.TestCase):
     def cadastrar(self, cliente, nome):
         status,dados,cabecalhos=self.pedido(cliente,'/api/cadastro',{'nome':nome,'email':nome+'@example.com','senha':'Senha longa de teste 123!'})
         self.assertEqual(status,200,dados)
+        self.assertIn('Max-Age=2592000',cabecalhos['Set-Cookie'])
+        self.assertEqual(dados['painel']['conta']['nome'],nome)
+        for questao in dados['painel']['questoes']:
+            self.assertIn('enunciado',questao)
+            self.assertIn('alternativas',questao)
+            self.assertNotIn('correta',questao)
+            self.assertNotIn('explicacao',questao)
         self.assertIn('HttpOnly',cabecalhos['Set-Cookie'])
         self.assertIn('SameSite=Strict',cabecalhos['Set-Cookie'])
     def test_entrada_pages_publicavel(self):

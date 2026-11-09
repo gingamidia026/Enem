@@ -103,6 +103,12 @@ class API(BaseHTTPRequestHandler):
             self.send_header('Set-Cookie', cookie)
         self.end_headers()
         self.wfile.write(corpo)
+    def painel(self, con, conta):
+        totais = con.execute('SELECT COUNT(*) total,COALESCE(SUM(acerto),0) acertos FROM respostas WHERE conta=?', (conta['id'],)).fetchone()
+        # Somente enunciados; gabarito e explicação continuam exclusivos da correção.
+        return {'conta': conta, 'progresso': dict(totais), 'questoes': [
+            {k: q[k] for k in ['id', 'area', 'titulo', 'enunciado', 'alternativas']} for q in QUESTOES]}
+
     def token(self):
         cookie = SimpleCookie()
         try:
@@ -192,18 +198,17 @@ class API(BaseHTTPRequestHandler):
                     raise Erro(401, 'E-mail ou senha incorretos.')
                 token = secrets.token_urlsafe(32)
                 con.execute('DELETE FROM sessoes WHERE expira<? OR token=?', (time.time(), digest(self.token())))
-                con.execute('INSERT INTO sessoes VALUES(?,?,?)', (digest(token), conta['id'], time.time() + 86400))
+                con.execute('INSERT INTO sessoes VALUES(?,?,?)', (digest(token), conta['id'], time.time() + 30 * 86400))
                 con.commit()
-                cookie = f'sessao={token}; HttpOnly; SameSite=Strict; Path=/; Max-Age=86400' + ('; Secure' if SEGURO else '')
-                return self.enviar(200, {'nome': conta['nome']}, cookie=cookie)
+                cookie = f'sessao={token}; HttpOnly; SameSite=Strict; Path=/; Max-Age=2592000' + ('; Secure' if SEGURO else '')
+                return self.enviar(200, {'nome': conta['nome'], 'painel': self.painel(con, {'id': conta['id'], 'nome': conta['nome']})}, cookie=cookie)
             conta = self.conta(con)
             if metodo == 'POST' and caminho == '/api/sair':
                 con.execute('DELETE FROM sessoes WHERE token=?', (digest(self.token()),))
                 con.commit()
                 return self.enviar(200, {'ok': True}, cookie='sessao=; HttpOnly; SameSite=Strict; Path=/; Max-Age=0' + ('; Secure' if SEGURO else ''))
             if metodo == 'GET' and caminho == '/api/painel':
-                totais = con.execute('SELECT COUNT(*) total,COALESCE(SUM(acerto),0) acertos FROM respostas WHERE conta=?', (conta['id'],)).fetchone()
-                return self.enviar(200, {'conta': conta, 'progresso': dict(totais), 'questoes': [{k: q[k] for k in ['id', 'area', 'titulo']} for q in QUESTOES]})
+                return self.enviar(200, self.painel(con, conta))
             partes = re.fullmatch(r'/api/questoes/([0-9]+)', caminho)
             if partes:
                 questao = next((q for q in QUESTOES if q['id'] == int(partes[1])), None)
