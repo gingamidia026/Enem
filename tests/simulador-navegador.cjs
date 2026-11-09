@@ -17,7 +17,7 @@ const net=require('node:net');
   browser=await chromium.launch({executablePath:'/opt/google/chrome/chrome',headless:true,args:['--no-sandbox']});
   const page=await browser.newPage({viewport:{width:390,height:844}});const erros=[];page.on('pageerror',e=>erros.push(e.message));
   await page.goto(origem);await page.getByLabel('Login',{exact:true}).fill('teste');await page.getByLabel('Senha',{exact:true}).fill('123');await page.getByRole('button',{name:'Entrar',exact:true}).click();
-  await page.getByRole('heading',{name:'Vamos dar o próximo passo?'}).waitFor();
+  await page.getByRole('heading',{name:'Continue seus estudos.'}).waitFor();
   await page.locator('nav').getByRole('link',{name:'Simular nota Enem'}).click();
   await page.getByRole('heading',{name:'Simule sua nota Enem.'}).waitFor();
   for(const [id,valor] of Object.entries({linguagens:'800',humanas:'750',natureza:'800',matematica:'750',redacao:'850'})) await page.locator('#nota-'+id).fill(valor);

@@ -3,7 +3,7 @@ const assert=require('node:assert/strict');
 (async()=>{
  const browser=await chromium.launch({executablePath:'/opt/google/chrome/chrome',headless:true,args:['--no-sandbox']});
  const page=await browser.newPage();const erros=[];page.on('pageerror',e=>erros.push(e.message));
- await page.goto('http://localhost:8088');await page.locator('#email').fill('teste');await page.locator('#senha').fill('123');await page.getByRole('button',{name:'Entrar',exact:true}).click();await page.getByRole('heading',{name:'Vamos dar o próximo passo?'}).waitFor();
+ await page.goto('http://localhost:8088');await page.locator('#email').fill('teste');await page.locator('#senha').fill('123');await page.getByRole('button',{name:'Entrar',exact:true}).click();await page.getByRole('heading',{name:'Continue seus estudos.'}).waitFor();
  const antes=await (await page.request.get('http://localhost:8088/api/painel')).json();
  const id=antes.densidade.proxima;assert(id);
  const dados={alternativa:0,envio:require('node:crypto').randomUUID()};

@@ -19,7 +19,7 @@ const path=require('node:path');
  await page.getByLabel('Login',{exact:true}).fill('teste');
  await page.getByLabel('Senha',{exact:true}).fill('123');
  await page.getByRole('button',{name:'Entrar',exact:true}).click();
- await page.getByRole('heading',{name:'Vamos dar o próximo passo?'}).waitFor();
+ await page.getByRole('heading',{name:'Continue seus estudos.'}).waitFor();
  await page.getByText('Olá, Teste.',{exact:true}).waitFor();
  await page.getByRole('button',{name:'Sair da conta'}).click();
  await page.getByRole('button',{name:'Quero criar uma conta'}).click();
@@ -27,12 +27,12 @@ const path=require('node:path');
  await page.getByLabel('E-mail',{exact:true}).fill(`teste${Date.now()}@example.com`);
  await page.getByLabel('Senha',{exact:true}).fill('Senha longa de teste 123!');
  await page.getByRole('button',{name:'Criar conta',exact:true}).click();
- await page.getByRole('heading',{name:'Vamos dar o próximo passo?'}).waitFor();
+ await page.getByRole('heading',{name:'Continue seus estudos.'}).waitFor();
  // CSP bloqueia molduras; medir viewport real, celular primeiro.
  for(const largura of [320,360,390,412,768,1440]){
    await page.setViewportSize({width:largura,height:900});
    await page.goto('http://localhost:8088');
-   await page.getByRole('heading',{name:'Vamos dar o próximo passo?'}).waitFor();
+   await page.getByRole('heading',{name:'Continue seus estudos.'}).waitFor();
    const medidas=await page.locator('html').evaluate(e=>({largura:e.clientWidth,conteudo:e.scrollWidth}));
    assert(medidas.conteudo<=medidas.largura,JSON.stringify({largura,...medidas}));
    if([390,768,1440].includes(largura)) await page.screenshot({path:path.join(__dirname,`../docs/tela-${largura}.png`),fullPage:true});
@@ -53,7 +53,7 @@ const path=require('node:path');
  }
  await page.getByRole('heading',{name:'Rodada concluída.'}).waitFor();
  await page.getByRole('link',{name:'Ver meu progresso'}).click();
- await page.getByRole('heading',{name:'Seu estudo, até aqui.'}).waitFor();
+ await page.getByRole('heading',{name:'Seu progresso'}).waitFor();
  await page.getByRole('button',{name:'Sair da conta'}).click();
  await page.getByRole('heading',{name:'Entre para estudar'}).waitFor();
  assert.deepEqual(erros,[]);

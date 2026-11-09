@@ -25,7 +25,7 @@ const fs=require('node:fs');const path=require('node:path');
   else {status=401;dados={erro:'Entre na sua conta para continuar.'};}
   await rota.fulfill({json:{status,dados}});
  });
- const inicio=()=>pagina.getByRole('heading',{name:'Vamos dar o próximo passo?'}).waitFor();
+ const inicio=()=>pagina.getByRole('heading',{name:'Continue seus estudos.'}).waitFor();
  const login=async()=>{await pagina.getByLabel('Login',{exact:true}).fill('teste');await pagina.getByLabel('Senha',{exact:true}).fill('123');await pagina.getByRole('button',{name:'Entrar',exact:true}).click();await inicio();};
  await pagina.goto('https://pu.gingamidia.com/');await login();
  assert.equal(pedidos,1,'login não deve buscar painel em segunda viagem');

@@ -46,7 +46,7 @@ async function preparar(page,habilitado=false){
  await conectado.getByRole('heading',{name:'Entre para estudar'}).waitFor();
  await conectado.getByLabel('Login',{exact:true}).fill('teste');await conectado.getByLabel('Senha',{exact:true}).fill('123');
  await conectado.getByRole('button',{name:'Entrar',exact:true}).click();
- await conectado.getByRole('heading',{name:'Vamos dar o próximo passo?'}).waitFor();
+ await conectado.getByRole('heading',{name:'Continue seus estudos.'}).waitFor();
  assert(conectado.url().startsWith('https://gingamidia026.github.io/Enem/'));
  await conectado.getByRole('link',{name:'Questões',exact:true}).click();await conectado.getByRole('button',{name:'Resolver questão'}).first().click();
  await conectado.getByLabel('C. R$ 60',{exact:true}).check();await conectado.getByRole('button',{name:'Conferir resposta'}).click();
