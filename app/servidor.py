@@ -15,6 +15,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from questoes import QUESTOES, CATALOGO, ARQUIVO_CATALOGO
 import base64
+from acompanhamento import preparar, ciclo, avancar, perfil
 
 DADOS = Path(os.environ.get('DADOS', '/dados'))
 DADOS.mkdir(parents=True, exist_ok=True)
@@ -49,6 +50,8 @@ with banco() as con:
     CREATE TABLE IF NOT EXISTS respostas(id INTEGER PRIMARY KEY, conta INTEGER REFERENCES contas(id), questao INTEGER NOT NULL, alternativa INTEGER NOT NULL, acerto INTEGER NOT NULL, criada REAL NOT NULL);
     CREATE TABLE IF NOT EXISTS limites(chave TEXT PRIMARY KEY, inicio REAL NOT NULL, total INTEGER NOT NULL);
     ''')
+with banco() as con:
+    preparar(con)
 os.chmod(BANCO, 0o600)
 
 def resumo(senha, sal, legado=False):
@@ -133,7 +136,7 @@ class API(BaseHTTPRequestHandler):
     def painel(self, con, conta):
         totais = con.execute('SELECT COUNT(*) total,COALESCE(SUM(acerto),0) acertos FROM respostas WHERE conta=?', (conta['id'],)).fetchone()
         # Somente enunciados; gabarito e explicação continuam exclusivos da correção.
-        return {'conta': conta, 'progresso': dict(totais), 'questoes': [
+        return {'densidade': ciclo(con, conta['id'], QUESTOES), 'perfil': perfil(con, conta['id'], QUESTOES), 'conta': conta, 'progresso': dict(totais), 'questoes': [
             {k: q[k] for k in (['id','area','titulo'] if q.get('oficial') else ['id', 'area', 'titulo', 'enunciado', 'alternativas'])} for q in QUESTOES],
             'catalogo': {'origem':'cofre','total':len(QUESTOES),'anuladas':CATALOGO['anuladas'],'revisar':CATALOGO['revisar'],'versao':CATALOGO['versao']} if CATALOGO is not None else {'origem':'demonstracao','total':len(QUESTOES)}}
 
@@ -252,7 +255,7 @@ class API(BaseHTTPRequestHandler):
                 if not questao:
                     raise Erro(404, 'Questão não encontrada.')
                 if metodo == 'GET':
-                    return self.enviar(200, {k: v for k, v in questao.items() if k not in ['correta', 'explicacao']})
+                    return self.enviar(200, {k: v for k, v in questao.items() if k not in ['correta', 'explicacao', 'estatisticaOriginal']})
                 if dados.get('acao') == 'imagem':
                     indice, parte = dados.get('indice'), dados.get('parte')
                     imagens = questao.get('imagens', [])
@@ -273,10 +276,28 @@ class API(BaseHTTPRequestHandler):
                 if type(alternativa) is not int or not 0 <= alternativa < len(questao['alternativas']):
                     raise Erro(400, 'Selecione uma alternativa válida.')
                 self.limitar(con, 'respostas:' + str(conta['id']), 200)
+                chave = dados.get('envio')
+                if chave is not None and (not isinstance(chave,str) or not re.fullmatch(r'[a-zA-Z0-9-]{20,80}',chave)):
+                    raise Erro(400, 'Identificador de envio inválido.')
+                con.execute('BEGIN IMMEDIATE')
+                if chave:
+                    anterior=con.execute('SELECT * FROM envios WHERE conta=? AND chave=?',(conta['id'],chave)).fetchone()
+                    if anterior:
+                        if anterior['questao'] != questao['id'] or anterior['alternativa'] != alternativa:
+                            raise Erro(409, 'Este envio já foi usado para outra resposta.')
+                        return self.enviar(200,json.loads(anterior['resultado']))
                 acerto = alternativa == questao['correta']
                 con.execute('INSERT INTO respostas(conta,questao,alternativa,acerto,criada) VALUES(?,?,?,?,?)', (conta['id'], questao['id'], alternativa, acerto, time.time()))
+                concluida=avancar(con,conta['id'],questao['id'],QUESTOES)
+                resultado={'acerto':acerto,'correta':questao['correta'],'explicacao':questao['explicacao'],'densidadeConcluida':concluida,'estatisticaOriginal':None}
+                if chave:
+                    con.execute('INSERT INTO envios VALUES(?,?,?,?,?)',(conta['id'],chave,questao['id'],alternativa,json.dumps(resultado)))
+                resultado['acompanhamento']={'densidade':ciclo(con,conta['id'],QUESTOES),'perfil':perfil(con,conta['id'],QUESTOES)}
+                totais=con.execute('SELECT COUNT(*) total,COALESCE(SUM(acerto),0) acertos FROM respostas WHERE conta=?',(conta['id'],)).fetchone()
+                resultado['progresso']=dict(totais)
+                if chave: con.execute('UPDATE envios SET resultado=? WHERE conta=? AND chave=?',(json.dumps(resultado),conta['id'],chave))
                 con.commit()
-                return self.enviar(200, {'acerto': acerto, 'correta': questao['correta'], 'explicacao': questao['explicacao']})
+                return self.enviar(200,resultado)
             raise Erro(404, 'Página não encontrada.')
 
 if __name__ == '__main__':

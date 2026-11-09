@@ -95,7 +95,16 @@ function login() {
 function mostrarPainel(dados) { painel = dados; menu.hidden = false; document.body.classList.remove('sem-sessao'); }
 async function atualizar() { mostrarPainel(await api('/api/painel')); }
 function indicadores() { const {total, acertos} = painel.progresso; return `<div class="indicadores"><div class="indicador"><strong>${total}</strong><span>respostas enviadas</span></div><div class="indicador"><strong>${acertos}</strong><span>acertos registrados</span></div><div class="indicador"><strong>${total ? Math.round(acertos / total * 100) + '%' : '—'}</strong><span>acerto nas tentativas</span>${total ? `<progress aria-label="Proporção de acertos nas tentativas" value="${acertos}" max="${total}"></progress>` : ''}</div></div>`; }
+function densidades() {
+  const d=painel.densidade;
+  if(!d) return '';
+  return `<h2>Densidades de estudo</h2><p><strong>${d.concluidas} densidades completas</strong> · ${d.feitas} de ${d.total} questões neste ciclo.</p>${d.total ? `<progress aria-label="Questões feitas na densidade" value="${d.feitas}" max="${d.total}"></progress>`:''}<p>Uma densidade termina depois de todas as matérias. Acertos e erros contam como prática.</p><p class="secundario">${escapar(d.base)}</p>${d.materias.map(m=>`<p>${escapar(m.materia)}: ${m.feitas} de ${m.total}</p>`).join('')}${d.bloqueada?'<p role="status">Uma questão do ciclo saiu do catálogo. O ciclo permanece guardado e aguarda revisão.</p>':''}${d.proxima?'<button id="continuar-densidade">Continuar densidade</button>':'<p>Nenhuma questão disponível para continuar.</p>'}`;
+}
+function ligarDensidade(){const b=document.querySelector('#continuar-densidade');if(b)b.onclick=()=>{b.disabled=true;b.textContent='Carregando…';abrir(painel.densidade.proxima).catch(e=>{erro(e);b.disabled=false;b.textContent='Continuar densidade';});};}
+function perfilAluno(){const p=painel.perfil;if(!p)return '';return `<h2>Seu perfil de aprendizagem</h2><p>Os assuntos aparecem do menor para o maior percentual de acertos. São indícios de dificuldade e facilidade, que mudam conforme você pratica.</p>${p.assuntos.length?p.assuntos.map(a=>`<article class="linha"><div><h3>${escapar(a.materia)} · ${escapar(a.assunto)}</h3><p>${a.acertos} acertos e ${a.erros} erros em ${a.tentativas} tentativas (${a.percentual}%).</p><p>${a.media===null?'Comparação indisponível: amostra coletiva insuficiente.':`Média dos usuários: ${a.media}%. Sua diferença: ${(a.percentual-a.media).toFixed(1)} pontos percentuais.`}</p></div></article>`).join(''):'<p>Responda uma questão para começar seu perfil.</p>'}<p>Média geral dos usuários: ${p.mediaGeral===null?'amostra insuficiente':p.mediaGeral+'%'}.</p><p class="secundario">Atualização semanal: ${escapar(p.atualizada.slice(0,10))}. ${escapar(p.periodo)} Questões retiradas do catálogo não entram na classificação por assunto; suas respostas continuam no histórico total. Esta comparação não é nota TRI.</p>`;}
+function privacidade(){tela(`<h1>Seus dados e sua segurança</h1><h2>O que guardamos e para quê</h2><p>Nome, e-mail, senha protegida por hash, sessão e respostas com data. Usamos esses dados para acesso à conta, histórico, perfil de aprendizagem e comparação coletiva semanal. O perfil é calculado por matéria e assunto; não determina capacidade ou diagnóstico.</p><h2>Onde passam os dados</h2><p>O navegador conversa com uma conexão HTTPS intermediária. Pedidos e respostas passam temporariamente por uma fila; o conector do PC os leva ao servidor. Contas e histórico ficam no banco da instalação do PU. O PC precisa estar ligado.</p><h2>Proteção e compartilhamento</h2><p>O navegador não recebe banco, senhas protegidas, respostas de outros alunos ou gabaritos antes da correção. O servidor verifica a sessão em cada pedido. A comparação mostra apenas médias agregadas de grupos com pelo menos cinco usuários e exclui a conta de teste. Não há envio das respostas a modelos de IA nesta funcionalidade.</p><h2>Sessão e armazenamento</h2><p>A sessão dura até 30 dias e pode ser encerrada em Sair da conta. No acesso público, a credencial de sessão fica no armazenamento do navegador; evite dispositivos compartilhados. A conta de teste é compartilhada: use somente dados fictícios nela. O histórico fica guardado entre reinícios. Prazos definitivos de retenção, exclusão de cópias e canal de atendimento ainda precisam ser definidos pela administração.</p><h2>Crianças e adolescentes</h2><p>O tratamento deve respeitar o melhor interesse de crianças e adolescentes. A operação para esse público depende de definição da base legal, procedimento adequado à idade e comunicação com responsáveis quando aplicável. Esses procedimentos ainda estão em revisão: use somente dados de teste nesta versão.</p><h2>Seus direitos</h2><p>Você pode solicitar informações, acesso, correção e exclusão, observadas as condições legais. O canal específico e o responsável pelo tratamento ainda estão pendentes de definição. Esta página descreve o funcionamento atual e não certifica conformidade integral com a LGPD.</p><p><a href="https://www.gov.br/anpd/pt-br/assuntos/noticias/anpd-divulga-enunciado-sobre-o-tratamento-de-dados-pessoais-de-criancas-e-adolescentes" target="_blank" rel="noopener noreferrer">Orientação da ANPD sobre crianças e adolescentes</a></p><a class="botao" href="#inicio">Voltar ao estudo</a>`);}
 function navegar() {
+  if(location.hash==='#privacidade') return privacidade();
   if (!painel) return login();
   simulado = null;
   const pagina = location.hash || '#inicio';
@@ -105,24 +114,24 @@ function navegar() {
   if(pagina === '#nota') {
     PUSimulador.mostrar(conteudo);
   } else if(pagina === '#questoes') {
-    tela('<h1>Escolha o que praticar.</h1><p>Comece por uma área ou explore todas as questões disponíveis.</p><label for="area">Área do conhecimento</label><select id="area"><option value="">Todas as áreas</option>' + [...new Set(painel.questoes.map(q=>q.area))].map(a=>`<option>${escapar(a)}</option>`).join('') + '</select><div id="lista"></div>');
-    const listar = () => { document.querySelector('#lista').innerHTML = painel.questoes.filter(q=>!document.querySelector('#area').value || q.area === document.querySelector('#area').value).map(q=>`<article class="linha"><div><p>${escapar(q.area)}</p><h2>${escapar(q.titulo)}</h2></div><button data-questao="${q.id}">Resolver questão</button></article>`).join(''); document.querySelectorAll('[data-questao]').forEach(b=>b.onclick=()=>abrir(Number(b.dataset.questao)).catch(erro)); };
-    document.querySelector('#area').onchange = listar; listar();
-    if(oficial) {const resumo=document.createElement('p');resumo.className='secundario';resumo.textContent=`${painel.questoes.length} questões do cofre disponíveis. Questões anuladas ficam fora do treino.`;document.querySelector('#lista').before(resumo);}
+    tela(`<h1>Continue seu ciclo de estudo.</h1>${densidades()}`);ligarDensidade();return;
   } else if(pagina === '#simulado') {
     tela(`<h1>Uma pausa para praticar.</h1><p>Resolva ${quantidadeSimulado} questões ${oficial ? 'do banco do cofre' : 'demonstrativas, uma de cada área'}. Ao final, veja quantas acertou nesta rodada.</p><div class="nota">${oficial ? 'Rodada de prática com questões oficiais do cofre' : 'Simulado curto de demonstração'}, sem cronômetro e sem cálculo de nota TRI. As respostas enviadas entram no seu progresso; a rodada em andamento é perdida ao sair da página.</div><button id="comecar" ${quantidadeSimulado ? '' : 'disabled'}>Começar simulado curto</button>`);
-    document.querySelector('#comecar').onclick=()=>{simulado={indice:0,acertos:0,ids:painel.questoes.slice(0,quantidadeSimulado).map(q=>q.id)}; abrir(simulado.ids[0]).catch(erro);};
+    document.querySelector('#comecar').onclick=()=>{simulado={indice:0,acertos:0,ids:Array(quantidadeSimulado).fill(painel.densidade.proxima)}; abrir(simulado.ids[0]).catch(erro);};
   } else if(pagina === '#progresso') {
-    tela(`<h1>Seu estudo, até aqui.</h1>${indicadores()}<p>${painel.progresso.total ? 'Cada tentativa faz parte do seu histórico. Repetir uma questão também conta como uma nova resposta.' : 'Seu progresso começa na primeira resposta. Escolha uma questão para experimentar.'}</p><a class="botao" href="#questoes">Praticar questões</a><div class="nota">Esses números representam tentativas e acertos nesta plataforma. Não são previsão de desempenho no ENEM.</div>`);
+    tela(`<h1>Seu estudo, até aqui.</h1>${indicadores()}${perfilAluno()}${densidades()}<p>${painel.progresso.total ? 'Cada tentativa faz parte do seu histórico. Repetir uma questão também conta como uma nova resposta.' : 'Seu progresso começa na primeira resposta. Escolha uma questão para experimentar.'}</p><a class="botao" href="#questoes">Praticar questões</a><div class="nota">Esses números representam tentativas e acertos nesta plataforma. Não são previsão de desempenho no ENEM.</div>`);
   } else {
     tela(`<p>Olá, ${escapar(painel.conta.nome)}.</p><h1>Vamos dar o próximo passo?</h1><p>Escolha uma questão, tente resolver e confira a resposta. Seu progresso fica guardado na sua conta.</p><div class="acoes"><a class="botao" href="#questoes">Praticar agora</a><a class="botao discreto" href="#simulado">Fazer simulado curto</a><a class="botao discreto" href="#nota">Simular nota Enem</a></div>${indicadores()}<h2>Um pouco de cada área</h2><p>Matemática, Linguagens, Ciências Humanas e Ciências da Natureza.</p><div class="nota">${oficial ? `Banco do cofre com ${painel.questoes.length} questões disponíveis. Atualizado ao iniciar ou reiniciar o PU no PC.` : 'Catálogo inicial com conteúdo autoral demonstrativo. O banco de questões oficiais ainda não está incluído.'}</div>`);
   }
+  ligarDensidade();
 }
 async function abrir(id) {
   aviso.textContent = 'Carregando questão…';
   const conhecida = painel?.questoes.find(q=>q.id===id);
   const q = conhecida?.enunciado && conhecida?.alternativas ? conhecida : await api('/api/questoes/' + id);
   tela(`<section class="questao" aria-label="Folha de questões"><div class="cabecalho-prova"><strong>Pé na Universidade</strong><span>${simulado ? 'Simulado curto' : 'Caderno de prática'}</span></div><p class="dados-questao">${escapar(q.area)}${simulado ? ` · Questão ${simulado.indice+1} de ${simulado.ids.length}` : ''}</p><h1>${escapar(q.titulo)}</h1>${q.oficial ? `<p class="secundario">${escapar(q.materia)}${q.revisar ? ' · Classificação de assunto em revisão' : ''}</p>` : ''}<p class="enunciado">${escapar(q.enunciado)}</p>${q.imagens?.length ? `<div class="originais"><p>${q.textoParcial ? 'A extração do texto não preservou todas as alternativas. Abra a imagem original antes de responder.' : 'Consulte a imagem original para conferir figuras, tabelas e fórmulas.'}</p><button type="button" id="ver-original">Ver imagem original da prova</button><p id="estado-original" role="status"></p><div id="imagens-originais"></div></div>` : ''}${q.fonte ? `<p><a href="${escapar(q.fonte)}" target="_blank" rel="noopener noreferrer">Abrir caderno oficial no Inep</a></p>` : ''}<form id="responder"><fieldset><legend>Selecione sua resposta</legend>${q.alternativas.map((a,i)=>`<label class="alternativa"><input type="radio" name="alternativa" value="${i}" required><span>${String.fromCharCode(65+i)}. ${escapar(a)}</span></label>`).join('')}</fieldset><button type="submit" ${q.textoParcial ? 'disabled' : ''}>Conferir resposta</button></form><div id="resultado" aria-live="polite"></div></section>`);
+  const envio=crypto.randomUUID();
+  let alternativaEnviada=null;
   const verOriginal = document.querySelector('#ver-original');
   if(verOriginal) verOriginal.onclick=async()=>{
     const destino=document.querySelector('#imagens-originais');
@@ -150,7 +159,8 @@ async function abrir(id) {
   document.querySelector('#responder').onsubmit=async evento=>{
     evento.preventDefault(); const form=evento.currentTarget; const botao=form.querySelector('button'); botao.disabled=true; botao.setAttribute('aria-busy','true'); botao.textContent='Conferindo…';
     try {
-      const r=await api('/api/questoes/'+id,{alternativa:Number(new FormData(form).get('alternativa'))});
+      alternativaEnviada ??= Number(new FormData(form).get('alternativa'));
+      const r=await api('/api/questoes/'+id,{alternativa:alternativaEnviada,envio});
       form.querySelector('fieldset').disabled=true; botao.hidden=true;
       form.querySelectorAll('.alternativa').forEach((alternativa,indice)=>{
         if(indice===r.correta || alternativa.querySelector('input').checked){
@@ -160,11 +170,11 @@ async function abrir(id) {
         }
       });
       if(simulado && r.acerto) simulado.acertos++;
-      await atualizar();
-      document.querySelector('#resultado').innerHTML=`<div class="resultado"><strong>${r.acerto ? 'Você acertou!' : 'Vamos entender essa resposta.'}</strong><p>Alternativa correta: ${String.fromCharCode(65+r.correta)}.</p><p>${escapar(r.explicacao)}</p></div>${simulado ? '<button id="proxima">Continuar simulado</button>' : '<a class="botao" href="#questoes">Escolher outra questão</a>'}`;
+      if(r.acompanhamento){painel.densidade=r.acompanhamento.densidade;painel.perfil=r.acompanhamento.perfil;painel.progresso=r.progresso;}
+      document.querySelector('#resultado').innerHTML=`<div class="resultado"><strong>${r.acerto ? 'Você acertou!' : 'Vamos entender essa resposta.'}</strong><p>Alternativa correta: ${String.fromCharCode(65+r.correta)}.</p><p>${escapar(r.explicacao)}</p><p>Alternativa mais escolhida na aplicação original: dado indisponível. Pesquisa nos microdados do Inep pendente para este item.</p>${r.densidadeConcluida?'<p role="status"><strong>Você completou uma densidade de todas as matérias!</strong></p>':''}</div>${simulado ? '<button id="proxima">Continuar simulado</button>' : '<a class="botao" href="#questoes">Continuar densidade</a>'}`;
       if(simulado) document.querySelector('#proxima').onclick=async()=>{
         simulado.indice++;
-        if(simulado.indice < simulado.ids.length) { try { await abrir(simulado.ids[simulado.indice]); } catch(e) { simulado.indice--; erro(e); } }
+        if(simulado.indice < simulado.ids.length && painel.densidade.proxima) { try { await abrir(painel.densidade.proxima); } catch(e) { simulado.indice--; erro(e); } }
         else { tela(`<h1>Rodada concluída.</h1><p>Você acertou ${simulado.acertos} de ${simulado.ids.length} questões nesta rodada.</p><a class="botao" href="#progresso">Ver meu progresso</a>`); simulado=null; }
       };
     } catch(e) { erro(e); botao.disabled=false; botao.removeAttribute('aria-busy'); botao.textContent='Conferir resposta'; }
@@ -184,7 +194,7 @@ if (publico) {
 // Navegar também quando o destino já é a seção selecionada.
 document.addEventListener('click', evento => {
   const link = evento.target.closest('a[href^="#"]');
-  if (link && ['#inicio','#questoes','#simulado','#nota','#progresso'].includes(link.hash) && link.hash === location.hash) { evento.preventDefault(); navegar(); }
+  if (link && ['#inicio','#questoes','#simulado','#nota','#progresso','#privacidade'].includes(link.hash) && link.hash === location.hash) { evento.preventDefault(); navegar(); }
 });
 
 document.addEventListener('pointerdown',()=>{document.documentElement.dataset.entrada='ponteiro';});
