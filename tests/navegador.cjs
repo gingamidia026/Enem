@@ -6,10 +6,14 @@ const path=require('node:path');
  const page=await browser.newPage({viewport:{width:1100,height:900}});
  const erros=[]; page.on('pageerror',e=>erros.push(e.message));
  await page.goto('http://localhost:8088');
- await page.getByText('Perfil de teste:',{exact:false}).waitFor();
+ await page.getByRole('heading',{name:'Entre para estudar'}).waitFor();
+ assert.equal(await page.getByText('Perfil de teste:',{exact:false}).count(),0);
  for(const largura of [320,390,768,1440]) {
    await page.setViewportSize({width:largura,height:900});
    assert(await page.locator('html').evaluate(e=>e.scrollWidth<=e.clientWidth));
+   await page.waitForTimeout(650);
+   const centro=await page.locator('.formulario').evaluate(e=>{const r=e.getBoundingClientRect();return Math.abs(r.x+r.width/2-innerWidth/2)});
+   assert(centro<2,`Login descentralizado: ${centro}`);
    if(largura===390) await page.screenshot({path:path.join(__dirname,'../docs/tela-login-390.png'),fullPage:true});
  }
  await page.getByLabel('Login',{exact:true}).fill('teste');

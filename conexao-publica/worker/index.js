@@ -1,4 +1,4 @@
-const ORIGEM = 'https://gingamidia026.github.io';
+const ORIGENS = new Set(['https://pu.gingamidia.com', 'https://gingamidia026.github.io']);
 const agora = () => Math.floor(Date.now()/1000);
 const permitido = (metodo,caminho) =>
   (metodo==='GET' && ['/api/configuracao','/api/painel'].includes(caminho)) ||
@@ -12,7 +12,7 @@ async function jsonPequeno(request,limite=20000) {
 }
 function responder(request,status,dados){
  const headers={'Content-Type':'application/json; charset=utf-8','Cache-Control':'no-store','X-Content-Type-Options':'nosniff','Referrer-Policy':'no-referrer'};
- if(request.headers.get('Origin')===ORIGEM){headers['Access-Control-Allow-Origin']=ORIGEM;headers['Vary']='Origin';headers['Access-Control-Allow-Methods']='GET, POST, OPTIONS';headers['Access-Control-Allow-Headers']='Content-Type, Authorization';headers['Access-Control-Max-Age']='600';}
+ if(ORIGENS.has(request.headers.get('Origin'))){headers['Access-Control-Allow-Origin']=request.headers.get('Origin');headers['Vary']='Origin';headers['Access-Control-Allow-Methods']='GET, POST, OPTIONS';headers['Access-Control-Allow-Headers']='Content-Type, Authorization';headers['Access-Control-Max-Age']='600';}
  return new Response(status===204?null:JSON.stringify(dados),{status,headers});
 }
 export default {
@@ -26,7 +26,7 @@ export default {
     const autorizacao=request.headers.get('Authorization')||'';
     if(await hash(autorizacao)!==await hash('Bearer '+env.CHAVE_CONECTOR))return responder(request,403,{erro:'Não autorizado.'});
    } else {
-    if(request.headers.get('Origin')!==ORIGEM)return responder(request,403,{erro:'Origem não autorizada.'});
+    if(!ORIGENS.has(request.headers.get('Origin')))return responder(request,403,{erro:'Origem não autorizada.'});
     if(request.method==='OPTIONS')return responder(request,204,null);
    }
    await env.DB.batch([env.DB.prepare('DELETE FROM fila WHERE expira<?').bind(tempo),env.DB.prepare('DELETE FROM limites WHERE expira<?').bind(tempo)]);

@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import {DatabaseSync} from 'node:sqlite';
 import {readFileSync} from 'node:fs';
-const origem='https://gingamidia026.github.io';
+const origem='https://pu.gingamidia.com';
 const db=new DatabaseSync(':memory:');
 db.exec(readFileSync(new URL('../conexao-publica/drizzle/0000_fila_transitoria.sql',import.meta.url),'utf8'));
 class Consulta{
@@ -21,7 +21,14 @@ async function pedir(rota,{metodo='GET',dados,interno=false,recibo,origin=origem
  const r=await worker.fetch(new Request('https://intermediario.example'+rota,{method:metodo,headers,body:dados===undefined?undefined:JSON.stringify(dados)}),env);
  return {status:r.status,dados:r.status===204?null:await r.json(),headers:r.headers};
 }
-assert.equal((await pedir('/pedido',{metodo:'OPTIONS'})).status,204);
+for(const origin of [origem,'https://gingamidia026.github.io']) {
+ const r=await pedir('/pedido',{metodo:'OPTIONS',origin});
+ assert.equal(r.status,204); assert.equal(r.headers.get('Access-Control-Allow-Origin'),origin);
+}
+for(const origin of ['http://pu.gingamidia.com','https://pu.gingamidia.com.outro.example','null']) {
+ const r=await pedir('/pedido',{metodo:'OPTIONS',origin});
+ assert.equal(r.status,403); assert.equal(r.headers.get('Access-Control-Allow-Origin'),null);
+}
 assert.equal((await pedir('/estado',{origin:'https://outro.example'})).status,403);
 assert.equal((await pedir('/conector/retirar',{metodo:'POST',dados:{}})).status,403);
 assert.equal((await pedir('/pedido',{metodo:'POST',dados:{metodo:'GET',caminho:'/api/painel'}})).status,503);

@@ -6,7 +6,27 @@ let painel = null;
 let cadastro = false;
 const publico = document.documentElement.dataset.publico === '1';
 const conexao = window.ENEM_PUBLICO || {};
+// A senha nunca é armazenada. O servidor mantém expiração e revogação.
+const chaveSessao = 'pu.sessao.v1';
 let sessao = '';
+function guardarSessao(token) {
+  sessao = token;
+  try {
+    if (token) localStorage.setItem(chaveSessao, JSON.stringify({token, expira:Date.now()+86400000}));
+    else localStorage.removeItem(chaveSessao);
+  } catch { /* Navegadores com armazenamento bloqueado mantêm a sessão na página. */ }
+}
+if (publico) {
+  try {
+    const salva = JSON.parse(localStorage.getItem(chaveSessao) || 'null');
+    if (salva && salva.expira > Date.now() && /^[A-Za-z0-9_-]{20,100}$/.test(salva.token)) sessao = salva.token;
+    else guardarSessao('');
+  } catch { guardarSessao(''); }
+}
+function mensagemErro(e) {
+  if (e instanceof TypeError || ['TimeoutError','AbortError'].includes(e.name)) return 'Não foi possível conectar ao PU. Verifique sua conexão e tente novamente.';
+  return e.message || 'Não foi possível concluir. Tente novamente.';
+}
 let perfilTeste = publico;
 let simulado = null;
 const escapar = valor => String(valor).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -34,14 +54,14 @@ async function api(caminho, dados) {
   const resposta = await transportar(caminho,dados);
   const resultado = resposta.dados;
   if(resposta.status>=400) {
-    if(resposta.status===401 && painel){painel=null;sessao='';simulado=null;login();}
+    if(resposta.status===401){painel=null;guardarSessao('');simulado=null;login();}
     throw new Error(resultado.erro || 'Não foi possível concluir. Tente novamente.');
   }
-  if(resultado.sessao){sessao=resultado.sessao;delete resultado.sessao;}
-  if(caminho==='/api/sair')sessao='';
+  if(resultado.sessao){guardarSessao(resultado.sessao);delete resultado.sessao;}
+  if(caminho==='/api/sair')guardarSessao('');
   return resultado;
 }
-function erro(e) { aviso.textContent = e.message || 'Falha de conexão. Tente novamente.'; }
+function erro(e) { aviso.textContent = mensagemErro(e); }
 const observadorEntrada = 'IntersectionObserver' in window ? new IntersectionObserver(entradas => {
   entradas.forEach(entrada => {
     if (entrada.isIntersecting) {
@@ -62,15 +82,16 @@ function tela(html) {
 }
 function login() {
   menu.hidden = true;
-  tela(`<div class="acesso"><section class="formulario"><h1>${cadastro ? 'Crie seu espaço' : 'Entre para estudar'}</h1><p>Continue seus estudos, no seu ritmo.</p>${publico && !conexao.habilitado ? '<p class="nota" role="status">O acesso público está em configuração. Ainda não é possível entrar.</p>' : ''}<form id="acesso">${cadastro ? '<label for="nome">Como você se chama?</label><input id="nome" name="nome" autocomplete="name" minlength="2" maxlength="80" required>' : ''}<label for="email">${cadastro ? 'E-mail' : 'Login'}</label><input id="email" name="email" type="${cadastro ? 'email' : 'text'}" autocomplete="username" maxlength="232" spellcheck="false" required><label for="senha">Senha</label><input id="senha" name="senha" type="password" autocomplete="${cadastro ? 'new-password' : 'current-password'}" minlength="${cadastro ? 12 : 1}" maxlength="128" required><small>${cadastro ? 'Use de 12 a 128 caracteres.' : 'Digite sua senha para entrar.'}</small><button type="submit" ${publico && !conexao.habilitado ? 'disabled' : ''}>${cadastro ? 'Criar conta' : 'Entrar'}</button><p id="erro-acesso" class="erro-campo" role="alert"></p></form>${!cadastro && perfilTeste ? '<p class="nota">Perfil de teste: login <strong>teste</strong> e senha <strong>123</strong>.</p>' : ''}<button class="discreto troca" id="trocar">${cadastro ? 'Já tenho uma conta' : 'Quero criar uma conta'}</button><p class="privacidade"><small>Guardamos seu nome, e-mail e respostas para mostrar seu progresso. Use dados de teste nesta versão inicial.</small></p></section></div>`);
+  document.body.classList.add('sem-sessao');
+  tela(`<div class="acesso"><section class="formulario"><h1>${cadastro ? 'Crie seu espaço' : 'Entre para estudar'}</h1><p>Continue seus estudos, no seu ritmo.</p>${publico && !conexao.habilitado ? '<p class="nota" role="status">O acesso público está em configuração. Ainda não é possível entrar.</p>' : ''}<form id="acesso">${cadastro ? '<label for="nome">Como você se chama?</label><input id="nome" name="nome" autocomplete="name" minlength="2" maxlength="80" required>' : ''}<label for="email">${cadastro ? 'E-mail' : 'Login'}</label><input id="email" name="email" type="${cadastro ? 'email' : 'text'}" autocomplete="username" maxlength="232" spellcheck="false" required><label for="senha">Senha</label><input id="senha" name="senha" type="password" autocomplete="${cadastro ? 'new-password' : 'current-password'}" minlength="${cadastro ? 12 : 1}" maxlength="128" required><small>${cadastro ? 'Use de 12 a 128 caracteres.' : 'Digite sua senha para entrar.'}</small><button type="submit" ${publico && !conexao.habilitado ? 'disabled' : ''}>${cadastro ? 'Criar conta' : 'Entrar'}</button><p id="erro-acesso" class="erro-campo" role="alert"></p></form><button class="discreto troca" id="trocar">${cadastro ? 'Já tenho uma conta' : 'Quero criar uma conta'}</button><p class="privacidade"><small>Guardamos seu nome, e-mail e respostas para mostrar seu progresso. Use dados de teste nesta versão inicial.</small></p></section></div>`);
   document.querySelector('#trocar').onclick = () => { cadastro = !cadastro; login(); };
   document.querySelector('#acesso').onsubmit = async evento => {
     evento.preventDefault(); const form = evento.currentTarget; const botao = form.querySelector('button');
     botao.disabled = true; botao.setAttribute('aria-busy','true'); form.setAttribute('aria-busy','true'); document.querySelector('#erro-acesso').textContent=''; botao.textContent = cadastro ? 'Criando conta…' : 'Entrando…'; aviso.textContent = '';
-    try { await api(cadastro ? '/api/cadastro' : '/api/entrar', Object.fromEntries(new FormData(form))); await atualizar(); navegar(); } catch(e) { document.querySelector('#erro-acesso').textContent = e.message || 'Falha de conexão. Tente novamente.'; } finally { form.removeAttribute('aria-busy'); botao.removeAttribute('aria-busy'); botao.disabled = false; botao.textContent = cadastro ? 'Criar conta' : 'Entrar'; }
+    try { await api(cadastro ? '/api/cadastro' : '/api/entrar', Object.fromEntries(new FormData(form))); await atualizar(); navegar(); } catch(e) { document.querySelector('#erro-acesso').textContent = mensagemErro(e); } finally { form.removeAttribute('aria-busy'); botao.removeAttribute('aria-busy'); botao.disabled = false; botao.textContent = cadastro ? 'Criar conta' : 'Entrar'; }
   };
 }
-async function atualizar() { painel = await api('/api/painel'); menu.hidden = false; }
+async function atualizar() { painel = await api('/api/painel'); menu.hidden = false; document.body.classList.remove('sem-sessao'); }
 function indicadores() { const {total, acertos} = painel.progresso; return `<div class="indicadores"><div class="indicador"><strong>${total}</strong><span>respostas enviadas</span></div><div class="indicador"><strong>${acertos}</strong><span>acertos registrados</span></div><div class="indicador"><strong>${total ? Math.round(acertos / total * 100) + '%' : '—'}</strong><span>acerto nas tentativas</span>${total ? `<progress aria-label="Proporção de acertos nas tentativas" value="${acertos}" max="${total}"></progress>` : ''}</div></div>`; }
 function navegar() {
   if (!painel) return login();
@@ -121,7 +142,7 @@ document.querySelector('#sair').onclick=async()=>{try {await api('/api/sair',{})
 window.addEventListener('hashchange',navegar);
 login();
 if (publico) {
-  if (conexao.habilitado) api('/api/configuracao').then(config=>{perfilTeste=config.perfilTeste;}).catch(erro);
+  if (conexao.habilitado && sessao) atualizar().then(navegar).catch(e=>{if(sessao)erro(e);});
 } else {
   api('/api/configuracao').then(config => { perfilTeste = config.perfilTeste; return atualizar(); }).then(navegar).catch(e=>{login(); if(!e.message.includes('Entre na sua conta'))erro(e);});
 }

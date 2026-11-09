@@ -166,3 +166,12 @@ h2 { font-family: "Iowan Old Style", "Palatino Linotype", "Book Antiqua", Palati
 @media(max-width:380px) { .indicadores { grid-template-columns: 1fr; } .indicador { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; } .formulario { padding: 24px 20px; } }
 @media(prefers-reduced-motion:reduce) { .revelar { animation: none; } }
 @media(prefers-contrast:more) { .indicador,.nota,.resultado,.discreto { border-color: #555; } }
+
+/* Login centralizado, sem reservar espaço para o menu oculto. */
+[hidden] { display: none !important; }
+body.sem-sessao { min-height: 100svh; display: flex; flex-direction: column; }
+.sem-sessao .estrutura { width: 100%; max-width: none; flex: 1; min-height: 0; margin: 0; }
+.sem-sessao main { max-width: none; display: flex; flex-direction: column; justify-content: center; padding: 2rem 1.25rem; }
+.sem-sessao .acesso { margin: 0 auto; }
+.sem-sessao #aviso:empty { display: none; }
+.sem-sessao #aviso { margin-inline: auto; }
