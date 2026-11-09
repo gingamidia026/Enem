@@ -306,3 +306,23 @@ button,.botao { min-height: 44px; padding: .5rem .875rem; font-size: .875rem; fo
 .topo .menu { border-bottom-width: 1px; }
 .topo .menu a { font-weight: 500; border-radius: 4px; }
 .topo .menu button { border-radius: 4px; }
+
+/* Dominique-Oliveira-ChatGPT🤖💚: cabeçalho menor em todos os estados. */
+.topo { min-height: 56px; padding-block: 4px; gap: 8px; }
+.topo .marca { gap: 6px; }
+.topo .marca strong { font-size: .8125rem; line-height: 1.25; }
+.topo .marca strong span { font-size: .625rem; margin-top: 0; }
+.topo .simbolo { width: 20px; height: 20px; }
+.topo .simbolo svg { width: 15px; height: 15px; }
+.topo .menu { padding: 4px 12px 8px; gap: 0; max-height: calc(100dvh - 56px); }
+.topo .menu a { font-size: .8125rem; padding: 4px 10px; }
+.topo .menu button { font-size: .8125rem; padding: 4px 10px; margin-top: 2px; }
+.menu-botao { padding: 15px 14px; }
+.menu-botao[aria-expanded=true] span:nth-child(1) { transform: translateY(6px) rotate(45deg); }
+.menu-botao[aria-expanded=true] span:nth-child(3) { transform: translateY(-6px) rotate(-45deg); }
+@media(min-width:1280px) {
+ .topo .menu { padding: 0; max-height: none; }
+ .topo .menu a { font-size: .8125rem; padding-inline: 8px; }
+ .topo .menu button { font-size: .8125rem; margin: 0 0 0 4px; }
+}
+@media(max-width:380px) { .topo .marca strong { font-size: .8125rem; } }
