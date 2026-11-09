@@ -242,3 +242,5 @@ header { min-height: var(--altura-cabecalho); padding-block: .25rem; }
 .originais { margin-block: 1.5rem; }
 .originais img { display: block; max-width: 100%; height: auto; margin-block: 1rem; background: white; }
 .questao .enunciado { white-space: pre-line; }
+
+.dispositivo-autorizado { margin-block: 1.5rem; }

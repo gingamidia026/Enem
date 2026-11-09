@@ -109,7 +109,7 @@ async function dispositivosPermitidos(){
   tela('<p role="status">Carregando dispositivos…</p>');
   try {
     const dados=await api('/api/dispositivos');
-    tela('<h1>Dispositivos autorizados</h1><p>Um novo navegador é registrado após entrar com sua senha. Você pode manter até cinco dispositivos. Revogar encerra as sessões daquele dispositivo.</p>'+dados.dispositivos.map(d=>`<section><h2>${escapar(d.nome)}${d.atual?' (este dispositivo)':''}</h2><button data-revogar="${escapar(d.id)}">Revogar acesso</button></section>`).join(''));
+    tela('<h1>Dispositivos autorizados</h1><p>Um novo navegador é registrado após entrar com sua senha. Você pode manter até cinco dispositivos. Revogar encerra as sessões daquele dispositivo.</p>'+dados.dispositivos.map(d=>`<section class="dispositivo-autorizado"><h2>${escapar(d.nome)}${d.atual?' (este dispositivo)':''}</h2><button data-revogar="${escapar(d.id)}">Revogar acesso</button></section>`).join(''));
     document.querySelectorAll('[data-revogar]').forEach(b=>b.onclick=async()=>{b.disabled=true;try{await api('/api/dispositivos',{acao:'revogar',id:b.dataset.revogar});await atualizar();await dispositivosPermitidos();}catch(e){erro(e);b.disabled=false;}});
   }catch(e){erro(e);}
 }
@@ -119,10 +119,10 @@ function navegar() {
   if (!painel) return login();
   simulado = null;
   const pagina = location.hash || '#inicio';
-  if(pagina==='#dispositivos')return dispositivosPermitidos();
   const oficial = painel.catalogo?.origem === 'cofre';
   const quantidadeSimulado = Math.min(10, painel.questoes.length);
   menu.querySelectorAll('a').forEach(a => { if(a.hash === pagina) a.setAttribute('aria-current','page'); else a.removeAttribute('aria-current'); });
+  if(pagina==='#dispositivos')return dispositivosPermitidos();
   if(pagina === '#nota') {
     PUSimulador.mostrar(conteudo);
   } else if(pagina === '#questoes') {
