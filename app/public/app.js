@@ -170,14 +170,12 @@ async function abrir(id) {
   aviso.textContent = 'Carregando questão…';
   const conhecida = painel?.questoes.find(q=>q.id===id);
   const q = conhecida?.enunciado && conhecida?.alternativas ? conhecida : await api('/api/questoes/' + id);
-  tela(`<section class="questao" aria-label="Folha de questões"><div class="cabecalho-prova"><strong>Pé na Universidade</strong><span>${simulado ? 'Simulado curto' : 'Caderno de prática'}</span></div><p class="dados-questao">${escapar(q.area)}${simulado ? ` · Questão ${simulado.indice+1} de ${simulado.ids.length}` : ''}</p><h1>${escapar(q.titulo)}</h1>${q.oficial ? `<p class="secundario">${escapar(q.materia)}${q.revisar ? ' · Classificação de assunto em revisão' : ''}</p>` : ''}<p class="enunciado">${escapar(q.enunciado)}</p>${q.imagens?.length ? `<div class="originais"><p>${q.textoParcial ? 'A extração do texto não preservou todas as alternativas. Abra a imagem original antes de responder.' : 'Consulte a imagem original para conferir figuras, tabelas e fórmulas.'}</p><button type="button" id="ver-original">Ver imagem original da prova</button><p id="estado-original" role="status"></p><div id="imagens-originais"></div></div>` : ''}${q.fonte ? `<p><a href="${escapar(q.fonte)}" target="_blank" rel="noopener noreferrer">Abrir caderno oficial no Inep</a></p>` : ''}<form id="responder"><fieldset><legend>Selecione sua resposta</legend>${q.alternativas.map((a,i)=>`<label class="alternativa"><input type="radio" name="alternativa" value="${i}" required><span>${String.fromCharCode(65+i)}. ${escapar(a)}</span></label>`).join('')}</fieldset><button type="submit" ${q.textoParcial ? 'disabled' : ''}>Conferir resposta</button></form><div id="resultado" aria-live="polite"></div></section>`);
+  tela(`<section class="questao" aria-label="Folha de questões"><div class="cabecalho-prova"><strong>Pé na Universidade</strong><span>${simulado ? 'Simulado curto' : 'Caderno de prática'}</span></div><p class="dados-questao">${escapar(q.area)}${simulado ? ` · Questão ${simulado.indice+1} de ${simulado.ids.length}` : ''}</p><h1>${escapar(q.titulo)}</h1>${q.oficial ? `<p class="secundario">${escapar(q.materia)}${q.revisar ? ' · Classificação de assunto em revisão' : ''}</p>` : ''}<p class="enunciado">${escapar(q.enunciado)}</p>${q.imagens?.length ? `<div class="originais"><p>${q.textoParcial ? 'A extração do texto não preservou todas as alternativas. A imagem original será carregada antes de responder.' : 'Consulte a imagem original para conferir figuras, tabelas e fórmulas.'}</p><p id="estado-original" role="status"></p><div id="imagens-originais"></div></div>` : ''}${q.fonte ? `<p><a href="${escapar(q.fonte)}" target="_blank" rel="noopener noreferrer">Abrir caderno oficial no Inep</a></p>` : ''}<form id="responder"><fieldset><legend>Selecione sua resposta</legend>${q.alternativas.map((a,i)=>`<label class="alternativa"><input type="radio" name="alternativa" value="${i}" required><span>${String.fromCharCode(65+i)}. ${escapar(a)}</span></label>`).join('')}</fieldset><button type="submit" ${q.textoParcial ? 'disabled' : ''}>Conferir resposta</button></form><div id="resultado" aria-live="polite"></div></section>`);
   const envio=crypto.randomUUID();
   let alternativaEnviada=null;
-  const verOriginal = document.querySelector('#ver-original');
-  if(verOriginal) verOriginal.onclick=async()=>{
+  const carregarImagens = async()=>{
     const destino=document.querySelector('#imagens-originais');
     const estado=document.querySelector('#estado-original');
-    verOriginal.disabled=true;
     try {
       destino.replaceChildren();
       for(let indice=0;indice<q.imagens.length;indice++) {
@@ -190,13 +188,15 @@ async function abrir(id) {
         }
         const imagem=document.createElement('img');imagem.alt=`Imagem original ${indice+1} da questão ${q.titulo}`;
         imagem.src='data:image/png;base64,'+blocos.join('');
-        await imagem.decode();destino.append(imagem);
+        await imagem.decode();
+        if(!destino.isConnected) return;
+        destino.append(imagem);
       }
       estado.textContent='Imagens originais carregadas. Você pode conferir sua resposta.';
-      document.querySelector('#responder button[type=submit]').disabled=false;
-      verOriginal.hidden=true;
-    } catch(e) {if(estado.isConnected){estado.textContent=mensagemErro(e);verOriginal.disabled=false;}}
+      if(q.textoParcial && alternativaEnviada===null) destino.closest('.questao').querySelector('#responder button[type=submit]').disabled=false;
+    } catch(e) {if(estado.isConnected) estado.textContent=mensagemErro(e);}
   };
+  if(q.imagens?.length) void carregarImagens();
   document.querySelector('#responder').onsubmit=async evento=>{
     evento.preventDefault(); const form=evento.currentTarget; const botao=form.querySelector('button'); botao.disabled=true; botao.setAttribute('aria-busy','true'); botao.textContent='Conferindo…';
     try {
