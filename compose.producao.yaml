@@ -1,0 +1,47 @@
+# Usar exclusivamente em um servidor separado do computador pessoal.
+name: enem-producao
+services:
+  aplicacao:
+    build: .
+    environment:
+      ORIGEM: https://${DOMINIO:?Defina DOMINIO no ambiente}
+      COOKIE_SEGURO: '1'
+    volumes: [estudos:/dados]
+    read_only: true
+    tmpfs: [/tmp:size=16m,noexec,nosuid]
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    pids_limit: 128
+    mem_limit: 256m
+    cpus: 1
+    networks: [interna]
+    restart: unless-stopped
+    healthcheck:
+      test: [CMD, python, -c, "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/saude')"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+  proxy:
+    image: caddy:2-alpine
+    environment:
+      DOMINIO: ${DOMINIO:?Defina DOMINIO no ambiente}
+    ports: ["80:80", "443:443"]
+    volumes:
+      - ./Caddyfile.producao:/etc/caddy/Caddyfile:ro
+      - certificados:/data
+      - configuracao:/config
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    networks: [interna, externa]
+    depends_on:
+      aplicacao:
+        condition: service_healthy
+    restart: unless-stopped
+networks:
+  interna:
+    internal: true
+  externa:
+volumes:
+  estudos:
+  certificados:
+  configuracao:

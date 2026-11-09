@@ -1,0 +1,6 @@
+.env
+dados/
+*.sqlite*
+__pycache__/
+*.pyc
+node_modules/

@@ -1,0 +1,16 @@
+name: Verificar plataforma
+on: [push, pull_request]
+permissions:
+  contents: read
+jobs:
+  testes:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - run: python tests/testar.py
+      - run: docker compose config --quiet
+      - run: DOMINIO=estudo.example.com docker compose -f compose.producao.yaml config --quiet
+      - run: docker build -t enem-verificacao .

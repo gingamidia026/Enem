@@ -1,0 +1,6 @@
+{$DOMINIO} {
+  request_body {
+    max_size 16KB
+  }
+  reverse_proxy aplicacao:8000
+}

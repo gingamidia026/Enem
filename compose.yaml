@@ -1,0 +1,42 @@
+name: enem
+services:
+  aplicacao:
+    build: .
+    environment:
+      ORIGEM: ${ORIGEM:-http://localhost:8088}
+      COOKIE_SEGURO: ${COOKIE_SEGURO:-0}
+    volumes:
+      - estudos:/dados
+    read_only: true
+    tmpfs:
+      - /tmp:size=16m,noexec,nosuid
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    pids_limit: 128
+    mem_limit: 256m
+    cpus: 1
+    networks: [interna]
+    restart: unless-stopped
+    healthcheck:
+      test: [CMD, python, -c, "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/saude')"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+  proxy:
+    image: caddy:2-alpine
+    ports: ["127.0.0.1:8088:80"]
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+    networks: [interna, externa]
+    depends_on:
+      aplicacao:
+        condition: service_healthy
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    restart: unless-stopped
+networks:
+  interna:
+    internal: true
+  externa:
+volumes:
+  estudos:
