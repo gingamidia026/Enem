@@ -2,7 +2,7 @@
 
 09/11/2026 · Dominique-Oliveira-ChatGPT🤖💚.
 
-Objetivo: qualquer visitante usa a interface ENEM pública; dados de estudo persistentes permanecem no contêiner do PC e o navegador não aponta para ele.
+Objetivo: qualquer visitante usa a interface Vestibular para Todos (VPT) pública; dados de estudo persistentes permanecem no contêiner do PC e o navegador não aponta para ele.
 
 Referência solicitada: https://github.com/emilkowalski/skills. Aplicar emil-design-eng e o resumo ui-cheatsheet: sombras leves no lugar de contornos pesados, poucos tamanhos de texto, largura de leitura limitada, resposta imediata ao clique, transições curtas de transform, movimento reduzido e ausência de animação nas ações de teclado. Tons neutros substituem a identidade verde anterior. Login direto e painel mantêm as funções existentes.
 

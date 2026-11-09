@@ -1,4 +1,4 @@
-# ENEM • Espaço de estudo
+# Vestibular para Todos (VPT) • Espaço de estudo
 
 Aplicação de estudo com Docker, contas e histórico no PC da Dominique. Autora: Dominique-Oliveira-ChatGPT🤖💚.
 
@@ -19,14 +19,15 @@ Aplicação da skill [apple-design, da coleção de Emil Kowalski](https://githu
 
 ```sh
 ./scripts/instalar-comando.sh
-enem
-enem parar
-enem reiniciar
-enem status
-enem logs
+vpt
+vpt parar
+vpt reiniciar
+vpt status
+vpt logs
+vpt ajuda
 ```
 
-O instalador cria o atalho em `~/.local/bin` sem substituir outro comando. A sessão de desenvolvimento não pôde escrever nessa pasta; execute o instalador no terminal da Dominique. Antes disso, use `./enem` dentro deste projeto. A instalação local abre em `http://localhost:8088`, apenas para administração e testes neste PC. Parar e reiniciar preservam o volume.
+O instalador cria o comando `vpt` em `~/.local/bin`, sem substituir outro comando. `vpt` inicia a aplicação, o proxy e o conector público configurado. A instalação local abre em `http://localhost:8088`. Parar e reiniciar preservam o volume com contas e histórico. `vpt logs` acompanha os registros; Ctrl+C sai da visualização e mantém o site ligado. Autora da atualização: Dominique-Oliveira-ChatGPT🤖💚.
 
 ## Acesso público sem portas abertas no PC
 
@@ -50,7 +51,7 @@ A ausência do conector deve aparecer como indisponibilidade temporária. Um PC 
 
 ## Conexão ativa
 
-Intermediário publicado como público com D1 e segredo do conector. A chave local permanece fora do Git. O comando `./enem` inicia o conector quando `.segredos/ativado` está presente.
+Intermediário publicado como público com D1 e segredo do conector. A chave local permanece fora do Git. O comando `./vpt` inicia o conector quando `.segredos/ativado` está presente.
 
 Verificados por HTTPS: disponibilidade, login, painel e saída. Os testes locais verificam cadastro, isolamento de contas e limitação de tentativas. Acesso exige PC e Docker ligados. Autora da ativação: Dominique-Oliveira-ChatGPT🤖💚.
 
@@ -65,3 +66,23 @@ node conexao-publica/scripts/validate-artifact.mjs
 ```
 
 O teste do intermediário usa SQLite em memória, sem acessar dados ou serviços reais. O teste de navegador opcional está em `tests/navegador.cjs`. Detalhes e limites em `docs/VERIFICACAO.md`.
+
+## Funcionamento do Vestibular para Todos (VPT) no computador
+
+Digite `vpt` em qualquer pasta do terminal. Sem argumento, ele equivale a `vpt iniciar`: seleciona o Docker configurado (ou o socket rootless disponível), tenta iniciar o serviço Docker do usuário se necessário, constrói a imagem local e sobe os serviços em segundo plano, aguardando a saúde da aplicação.
+
+- `vpt parar`: interrompe os serviços deste projeto, preservando contas e histórico.
+- `vpt reiniciar`: reinicia os serviços e aguarda a aplicação ficar disponível.
+- `vpt status`: lista os serviços, inclusive os parados.
+- `vpt logs`: acompanha os registros, começando pelas últimas 50 linhas. Ctrl+C encerra apenas a visualização.
+- `vpt ajuda`: mostra os comandos. `ligar` e `iniciar` são equivalentes; `desligar` equivale a `parar`.
+
+A aplicação lê e grava o banco no volume Docker `enem_estudos`, montado em `/dados`. O proxy oferece o acesso local em `http://localhost:8088`. O conector público também sobe quando existem `.segredos/conector` e `.segredos/ativado`; ele consulta a fila HTTPS por conexões de saída. A interface pública depende do computador, do Docker, da aplicação e do conector ligados. Parar os serviços deixa o atendimento público indisponível até iniciar novamente.
+
+O nome apresentado é sempre **Vestibular para Todos (VPT)**. ENEM continua mencionado quando é o exame estudado. A pasta `Enem`, o nome técnico Compose `enem`, o volume, as variáveis de integração e os endereços publicados foram preservados para manter os dados e a conexão existente. Não use `docker compose down -v`: esse comando exclui os volumes de dados. Parar não equivale a fazer uma cópia de segurança.
+
+Para reinstalar o atalho, execute `./scripts/instalar-comando.sh` nesta pasta. O controlador principal é `./vpt`; `./enem` permanece apenas como compatibilidade com atalhos anteriores. O instalador recusa substituir comandos de outro projeto.
+
+## Atualizações
+
+- 09/11/2026 · Dominique-Oliveira-ChatGPT🤖💚 · Nome alterado para Vestibular para Todos (VPT) na interface local e estática, no título e na identificação acessível. Documentados os comandos, os serviços, a persistência e as condições de acesso público.

@@ -4,13 +4,19 @@ set -euo pipefail
 PASTA_ENEM="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
 DESTINO_ENEM="${ENEM_BIN_DIR:-$HOME/.local/bin}"
 mkdir -p -- "$DESTINO_ENEM"
-if [[ -e "$DESTINO_ENEM/enem" || -L "$DESTINO_ENEM/enem" ]]; then
-  if [[ "$(readlink -f -- "$DESTINO_ENEM/enem")" != "$PASTA_ENEM/enem" ]]; then
-    echo "Já existe outro comando em $DESTINO_ENEM/enem; nenhum arquivo foi substituído." >&2
-    exit 1
+# Dominique-Oliveira-ChatGPT🤖💚 — instala o comando Vestibular para Todos (VPT).
+for comando in vpt; do
+  if [[ -e "$DESTINO_ENEM/$comando" || -L "$DESTINO_ENEM/$comando" ]]; then
+    if [[ "$(readlink -f -- "$DESTINO_ENEM/$comando")" != "$PASTA_ENEM/enem" && "$(readlink -f -- "$DESTINO_ENEM/$comando")" != "$PASTA_ENEM/vpt" ]]; then
+      echo "Já existe outro comando em $DESTINO_ENEM/$comando; nenhum arquivo foi substituído." >&2
+      exit 1
+    fi
   fi
-else
-  ln -s -- "$PASTA_ENEM/enem" "$DESTINO_ENEM/enem"
-fi
-printf 'Comando instalado: %s/enem\n' "$DESTINO_ENEM"
-case ":$PATH:" in *":$DESTINO_ENEM:"*) echo 'Pronto: digite enem.' ;; *) echo "Inclua $DESTINO_ENEM no PATH do seu terminal." ;; esac
+done
+for comando in vpt; do
+  if [[ ! -e "$DESTINO_ENEM/$comando" && ! -L "$DESTINO_ENEM/$comando" ]]; then
+    ln -s -- "$PASTA_ENEM/vpt" "$DESTINO_ENEM/$comando"
+  fi
+  printf 'Comando instalado: %s/%s\n' "$DESTINO_ENEM" "$comando"
+done
+case ":$PATH:" in *":$DESTINO_ENEM:"*) echo 'Pronto: digite vpt.' ;; *) echo "Inclua $DESTINO_ENEM no PATH do seu terminal." ;; esac

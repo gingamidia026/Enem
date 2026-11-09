@@ -1,8 +1,8 @@
-# Intermediário ENEM
+# Intermediário Vestibular para Todos (VPT)
 
 Autora: Dominique-Oliveira-ChatGPT🤖💚.
 
-Worker ESM com fila D1 transitória. Recebe somente operações da interface ENEM e permite ao conector local retirá-las por HTTPS. Não tem acesso ao PC ou ao banco de estudos. Binding `DB`, segredo `CHAVE_CONECTOR` e migração em `drizzle/`.
+Worker ESM com fila D1 transitória. Recebe somente operações da interface Vestibular para Todos (VPT) e permite ao conector local retirá-las por HTTPS. Não tem acesso ao PC ou ao banco de estudos. Binding `DB`, segredo `CHAVE_CONECTOR` e migração em `drizzle/`.
 
 Estado: publicado como público em 09/11/2026, com D1 e segredo. Login e painel verificados por HTTPS. Dominique-Oliveira-ChatGPT🤖💚.
 

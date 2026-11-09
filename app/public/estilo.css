@@ -126,3 +126,7 @@ progress::-moz-progress-bar { background: var(--destaque); }
 @media(prefers-reduced-motion:reduce) { .botao:active { transform: none !important; } }
 @media(max-width:40rem) { .etiqueta { display: none; } }
 @supports not (backdrop-filter:blur(1px)) { header,nav { background: #f5f5f7; } }
+
+/* Dominique-Oliveira-ChatGPT🤖💚 — nome completo e sigla em telas estreitas. */
+.marca { min-width: 0; }
+.marca strong { line-height: 1.35; }

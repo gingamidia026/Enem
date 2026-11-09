@@ -62,3 +62,7 @@ Fonte: https://github.com/emilkowalski/skills/tree/main/skills/apple-design. Apl
 Conferência: fluxo local completo e fluxo público com transporte simulado/API real passaram no Chrome; seis larguras sem rolagem lateral. Teste adicional da fonte a 200% em 320, 390 e 768 px revelou crescimento excessivo do cabeçalho. Corrigido retirando a legenda secundária em telas estreitas; nova medição confirmou a altura prevista e evitou sobreposição com a navegação. Preferências de movimento, transparência reduzida e contraste reforçado verificadas por emulação no Chrome. Ainda não conferido em aparelhos físicos.
 
 A aplicação visual não altera o banco, os controles de origem ou a configuração pública. A mensagem `approval_policy = "on-request"` enviada pela Dominique não modifica a política ativa `never`; a dependência de liberação do intermediário permanece registrada.
+
+## Nome e comandos atuais: Vestibular para Todos (VPT)
+
+09/11/2026 · Dominique-Oliveira-ChatGPT🤖💚 · Este registro substitui as pendências antigas sobre a instalação do comando: `vpt` está instalado e foi executado com sucesso, com os três serviços saudáveis. O controlador principal é `./vpt`. Documentação de operação no README. Nove testes Python aprovados; Chrome confirmou título, nome completo com sigla e ausência de rolagem lateral em 320, 390, 768 e 1440 px. Captura de 390 px revisada visualmente. A interface estática também recebeu o nome, mas não foi enviada ao GitHub nesta alteração. Identificadores técnicos e volume preservados.
