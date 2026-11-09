@@ -244,3 +244,65 @@ header { min-height: var(--altura-cabecalho); padding-block: .25rem; }
 .questao .enunciado { white-space: pre-line; }
 
 .dispositivo-autorizado { margin-block: 1.5rem; }
+
+/* Dominique-Oliveira-ChatGPT🤖💚: estrutura compartilhada com a Ginga,
+   preservando identidade do PU e a folha de resolução de questões. */
+body { overflow-x: clip; }
+.topo { position: sticky; top: 0; z-index: 50; gap: 1rem;
+  padding: .75rem max(1rem, calc((100% - 1180px) / 2));
+  min-height: 75px; border-bottom: 3px solid var(--texto); }
+.topo .marca { flex-shrink: 0; }
+.topo .marca strong span { display: block; }
+.menu-botao { display: flex; flex-direction: column; justify-content: space-between;
+  width: 48px; height: 48px; min-height: 48px; padding: 11px 9px; gap: 0;
+  border: 2px solid var(--texto); border-radius: 10px; color: var(--texto);
+  background: var(--painel); flex-shrink: 0; }
+.menu-botao span { width: 100%; height: 2px; background: currentColor; border-radius: 2px; }
+.menu-botao[aria-expanded=true] span:nth-child(1) { transform: translateY(10px) rotate(45deg); }
+.menu-botao[aria-expanded=true] span:nth-child(2) { opacity: 0; }
+.menu-botao[aria-expanded=true] span:nth-child(3) { transform: translateY(-10px) rotate(-45deg); }
+.topo .menu { display: none; position: absolute; inset: 100% 0 auto; width: auto;
+  padding: .5rem 1rem 1rem; background: var(--painel); border: 0;
+  border-bottom: 3px solid var(--texto); max-height: calc(100dvh - 80px);
+  overflow-y: auto; flex-direction: column; gap: .25rem; }
+.topo .menu.aberto { display: flex; }
+.topo .menu a { min-height: 44px; margin: 0; padding: .65rem .8rem;
+  color: var(--texto); font-weight: 600; font-size: .9375rem; border-radius: 999px; }
+.topo .menu a[aria-current=page] { background: var(--suave); box-shadow: none;
+  text-decoration: underline; text-underline-offset: 5px; }
+.topo .menu button { margin: .5rem 0 0; min-height: 44px; border-radius: 999px; }
+.estrutura { display: block; width: 100%; max-width: 1180px; min-height: calc(100svh - 150px); }
+main { max-width: none; width: 100%; padding: clamp(2.5rem,6vw,5rem) clamp(1rem,4vw,3rem) 5rem; }
+#conteudo { max-width: 1060px; margin-inline: auto; }
+#conteudo > h1 { max-width: 22ch; margin-block: 0 1.5rem; }
+#conteudo > h1 + p { margin-bottom: 2rem; }
+#conteudo > h2 { margin-top: 2.5rem; padding-top: 1.5rem; border-top: 1px solid var(--linha); }
+.questao,.simulador { margin-inline: auto; }
+footer { max-width: 1180px; width: 100%; margin-inline: auto; padding-inline: clamp(1rem,4vw,3rem); }
+.pular { z-index: 60; }
+main,[id] { scroll-margin-top: 6rem; }
+@media(min-width:1280px) {
+  .menu-botao { display: none; }
+  .topo .menu { display: flex; position: static; flex-direction: row; align-items: center;
+    padding: 0; gap: 0; border: 0; max-height: none; overflow: visible; }
+  .topo .menu a { white-space: nowrap; padding-inline: .6rem; font-size: .875rem; }
+  .topo .menu button { margin: 0 0 0 .5rem; padding-inline: .8rem; font-size: .875rem; }
+}
+@media(max-width:380px) {
+  .topo .marca { flex-shrink: 1; }
+  .topo .marca strong { font-size: .875rem; }
+  .topo .simbolo { display: none; }
+}
+
+/* Dominique-Oliveira-ChatGPT🤖💚: controles compactos e minimalistas. */
+button,.botao { min-height: 44px; padding: .5rem .875rem; font-size: .875rem; font-weight: 500; border-radius: 4px; gap: 6px; }
+.simbolo { width: 26px; height: 26px; border-radius: 4px; background: transparent; color: var(--texto); }
+.simbolo svg { width: 18px; height: 18px; stroke-width: 1.5; }
+.menu-botao { width: 44px; height: 44px; min-height: 44px; padding: 14px 12px; border: 0; border-radius: 4px; background: transparent; }
+.menu-botao span { height: 1px; border-radius: 0; }
+.menu-botao[aria-expanded=true] span:nth-child(1) { transform: translateY(7px) rotate(45deg); }
+.menu-botao[aria-expanded=true] span:nth-child(3) { transform: translateY(-7px) rotate(-45deg); }
+.topo { border-bottom-width: 1px; }
+.topo .menu { border-bottom-width: 1px; }
+.topo .menu a { font-weight: 500; border-radius: 4px; }
+.topo .menu button { border-radius: 4px; }

@@ -2,6 +2,30 @@
 const conteudo = document.querySelector('#conteudo');
 const aviso = document.querySelector('#aviso');
 const menu = document.querySelector('#menu');
+// Dominique-Oliveira-ChatGPT🤖💚: navegação no cabeçalho como no site da Ginga.
+const botaoMenu = document.querySelector('#menuBotao');
+function fecharMenu(devolverFoco = false) {
+  menu.classList.remove('aberto');
+  botaoMenu.setAttribute('aria-expanded', 'false');
+  botaoMenu.setAttribute('aria-label', 'Abrir menu');
+  if (devolverFoco) botaoMenu.focus();
+}
+botaoMenu.addEventListener('click', () => {
+  const aberto = menu.classList.toggle('aberto');
+  botaoMenu.setAttribute('aria-expanded', String(aberto));
+  botaoMenu.setAttribute('aria-label', aberto ? 'Fechar menu' : 'Abrir menu');
+});
+menu.addEventListener('click', evento => {
+  if (evento.target.closest('a,button')) fecharMenu();
+});
+document.addEventListener('keydown', evento => {
+  if (evento.key === 'Escape' && menu.classList.contains('aberto')) fecharMenu(true);
+});
+document.addEventListener('click', evento => {
+  if (!evento.target.closest('.topo')) fecharMenu();
+});
+const telaLarga = matchMedia('(min-width: 1280px)');
+telaLarga.addEventListener('change', () => fecharMenu());
 let painel = null;
 let cadastro = false;
 const publico = document.documentElement.dataset.publico === '1';
@@ -85,6 +109,8 @@ function tela(html) {
 }
 function login() {
   PUSimulador.limpar();
+  fecharMenu();
+  botaoMenu.hidden = true;
   menu.hidden = true;
   document.body.classList.add('sem-sessao');
   tela(`<div class="acesso"><section class="formulario"><h1>${cadastro ? 'Crie seu espaço' : 'Entre para estudar'}</h1><p>Entre para continuar o ciclo de questões e consultar seu progresso.</p>${publico && !conexao.habilitado ? '<p class="nota" role="status">O acesso público está em configuração. Ainda não é possível entrar.</p>' : ''}<form id="acesso">${cadastro ? '<label for="nome">Como você se chama?</label><input id="nome" name="nome" autocomplete="name" minlength="2" maxlength="80" required>' : ''}<label for="email">${cadastro ? 'E-mail' : 'Login'}</label><input id="email" name="email" type="${cadastro ? 'email' : 'text'}" autocomplete="username" maxlength="232" spellcheck="false" required><label for="senha">Senha</label><input id="senha" name="senha" type="password" autocomplete="${cadastro ? 'new-password' : 'current-password'}" minlength="${cadastro ? 12 : 1}" maxlength="128" required><small>${cadastro ? 'Use de 12 a 128 caracteres.' : 'Digite sua senha para entrar.'}</small><button type="submit" ${publico && !conexao.habilitado ? 'disabled' : ''}>${cadastro ? 'Criar conta' : 'Entrar'}</button><p id="erro-acesso" class="erro-campo" role="alert"></p></form><button class="discreto troca" id="trocar">${cadastro ? 'Já tenho uma conta' : 'Quero criar uma conta'}</button><p class="privacidade"><small>Guardamos seu nome, e-mail e respostas para mostrar seu progresso. Use dados de teste nesta versão inicial.</small></p></section></div>`);
@@ -95,7 +121,7 @@ function login() {
     try { const entrada = await api(cadastro ? '/api/cadastro' : '/api/entrar', {...Object.fromEntries(new FormData(form)),dispositivo,nomeDispositivo:'Meu navegador'}); if(entrada.iniciando)tela('<p role="status">Estamos iniciando seu site personalizado. Por favor, aguarde.</p>'); if(entrada.painel) mostrarPainel(entrada.painel); else await atualizar(); if(entrada.iniciando && !publico && location.pathname!='/site/'){location.assign('/site/'+location.hash);return;} navegar(); } catch(e) { if(!document.querySelector('#erro-acesso'))login(); document.querySelector('#erro-acesso').textContent = mensagemErro(e); } finally { form.removeAttribute('aria-busy'); botao.removeAttribute('aria-busy'); botao.disabled = false; botao.textContent = cadastro ? 'Criar conta' : 'Entrar'; }
   };
 }
-function mostrarPainel(dados) { painel = dados; menu.hidden = false; document.body.classList.remove('sem-sessao'); }
+function mostrarPainel(dados) { painel = dados; menu.hidden = false; botaoMenu.hidden = false; document.body.classList.remove('sem-sessao'); }
 async function atualizar() { if(!painel)tela('<p role="status">Estamos iniciando seu site personalizado. Por favor, aguarde.</p>'); mostrarPainel(await api('/api/painel')); }
 function indicadores() { const {total, acertos} = painel.progresso; return `<div class="indicadores"><div class="indicador"><strong>${total}</strong><span>respostas enviadas</span></div><div class="indicador"><strong>${acertos}</strong><span>acertos registrados</span></div><div class="indicador"><strong>${total ? Math.round(acertos / total * 100) + '%' : '—'}</strong><span>acerto nas tentativas</span>${total ? `<progress aria-label="Proporção de acertos nas tentativas" value="${acertos}" max="${total}"></progress>` : ''}</div></div>`; }
 function densidades() {
@@ -115,6 +141,9 @@ async function dispositivosPermitidos(){
 }
 function privacidade(){tela(`<h1>Seus dados e sua segurança</h1><h2>O que guardamos e para quê</h2><p>Nome, e-mail, senha protegida por hash, sessão e respostas com data. Usamos esses dados para acesso à conta, histórico, perfil de aprendizagem e comparação coletiva semanal. O perfil é calculado por matéria e assunto; não determina capacidade ou diagnóstico.</p><h2>Onde passam os dados</h2><p>O navegador conversa com uma conexão HTTPS intermediária. Pedidos e respostas passam temporariamente por uma fila; o conector do PC os leva ao servidor. Contas e histórico ficam no banco da instalação do PU. O PC precisa estar ligado.</p><h2>Proteção e compartilhamento</h2><p>O navegador não recebe banco, senhas protegidas, respostas de outros alunos ou gabaritos antes da correção. O servidor verifica a sessão em cada pedido. A comparação mostra apenas médias agregadas de grupos com pelo menos cinco usuários e exclui a conta de teste. Não há envio das respostas a modelos de IA nesta funcionalidade.</p><h2>Sessão e armazenamento</h2><p>A sessão dura até 30 dias e pode ser encerrada em Sair da conta. No acesso público, a credencial de sessão fica no armazenamento do navegador; evite dispositivos compartilhados. A conta de teste é compartilhada: use somente dados fictícios nela. O histórico fica guardado entre reinícios. Prazos definitivos de retenção, exclusão de cópias e canal de atendimento ainda precisam ser definidos pela administração.</p><h2>Crianças e adolescentes</h2><p>O tratamento deve respeitar o melhor interesse de crianças e adolescentes. A operação para esse público depende de definição da base legal, procedimento adequado à idade e comunicação com responsáveis quando aplicável. Esses procedimentos ainda estão em revisão: use somente dados de teste nesta versão.</p><h2>Seus direitos</h2><p>Você pode solicitar informações, acesso, correção e exclusão, observadas as condições legais. O canal específico e o responsável pelo tratamento ainda estão pendentes de definição. Esta página descreve o funcionamento atual e não certifica conformidade integral com a LGPD.</p><p><a href="https://www.gov.br/anpd/pt-br/assuntos/noticias/anpd-divulga-enunciado-sobre-o-tratamento-de-dados-pessoais-de-criancas-e-adolescentes" target="_blank" rel="noopener noreferrer">Orientação da ANPD sobre crianças e adolescentes</a></p><a class="botao" href="#inicio">Voltar ao estudo</a>`);}
 function navegar() {
+  fecharMenu();
+  const destino = location.hash || '#inicio';
+  menu.querySelectorAll('a').forEach(a => { if(a.hash === destino) a.setAttribute('aria-current','page'); else a.removeAttribute('aria-current'); });
   if(location.hash==='#privacidade') return privacidade();
   if (!painel) return login();
   simulado = null;
@@ -195,6 +224,8 @@ async function abrir(id) {
 document.querySelector('#sair').onclick=async()=>{try {await api('/api/sair',{}); painel=null;simulado=null;login();}catch(e){erro(e);}};
 window.addEventListener('hashchange',navegar);
 if (publico && conexao.habilitado && sessao) {
+  fecharMenu();
+  botaoMenu.hidden = true;
   menu.hidden = true; document.body.classList.add('sem-sessao');
   tela('<p role="status">Retomando seus estudos…</p>');
 } else login();
