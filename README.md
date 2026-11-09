@@ -13,7 +13,7 @@ Quatro questões autorais demonstrativas, sem vínculo com o Inep e sem cálculo
 
 ## Visual
 
-Aplicação das orientações de [Emil Kowalski](https://github.com/emilkowalski/skills): fundo claro, tons neutros, hierarquia contida, sombras discretas, pressão de botão de 140 ms, foco visível e preferência de movimento reduzido. Essa referência traz princípios de interface, não uma identidade de marca para copiar. Sem logos ou personagens de terceiros.
+Aplicação da skill [apple-design, da coleção de Emil Kowalski](https://github.com/emilkowalski/skills/tree/main/skills/apple-design): fonte do sistema com dimensões em rem, camadas translúcidas, superfícies agrupadas, foco visível e retorno imediato ao toque. O formulário mostra carregamento e erros junto aos campos; a correção identifica textualmente a resposta escolhida e a correta. Há suporte independente a movimento reduzido, transparência reduzida e contraste reforçado. Essa referência traz princípios de interface, não uma identidade de marca para copiar. Sem logos ou personagens de terceiros.
 
 ## Ligar e parar
 

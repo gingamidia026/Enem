@@ -52,3 +52,13 @@ Correção de arquitetura: dados permanecem no volume Docker deste PC, sem sincr
 | Entrada pelo localhost | Interface pública sem endereço do PC | Não confundir acesso remoto com acesso local |
 
 Referência: https://github.com/emilkowalski/skills. Foram aplicados princípios; não foi copiada uma marca de terceiros.
+
+## Skill apple-design aplicada
+
+09/11/2026 · Dominique-Oliveira-ChatGPT🤖💚.
+
+Fonte: https://github.com/emilkowalski/skills/tree/main/skills/apple-design. Aplicação à interface existente: material translúcido no cabeçalho e navegação, fonte do sistema com dimensões em rem, agrupamento, controles de toque, feedback imediato e estados de carregamento/erro. A escolha de resposta recebe indicação textual após a correção e o progresso usa medidor nativo quando há tentativas reais.
+
+Conferência: fluxo local completo e fluxo público com transporte simulado/API real passaram no Chrome; seis larguras sem rolagem lateral. Teste adicional da fonte a 200% em 320, 390 e 768 px revelou crescimento excessivo do cabeçalho. Corrigido retirando a legenda secundária em telas estreitas; nova medição confirmou a altura prevista e evitou sobreposição com a navegação. Preferências de movimento, transparência reduzida e contraste reforçado verificadas por emulação no Chrome. Ainda não conferido em aparelhos físicos.
+
+A aplicação visual não altera o banco, os controles de origem ou a configuração pública. A mensagem `approval_policy = "on-request"` enviada pela Dominique não modifica a política ativa `never`; a dependência de liberação do intermediário permanece registrada.

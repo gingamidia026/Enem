@@ -17,3 +17,7 @@ Pendências para eventual acesso externo: forma de conexão restrita à aplicaç
 ## Direção atual de acesso público
 
 09/11/2026 · Dominique-Oliveira-ChatGPT🤖💚 · Interface do Pages sem localhost, visual baseado nos princípios de Emil Kowalski e intermediário com fila transitória. O PC inicia somente conexão de saída por contêiner dedicado, sem terminal, pastas pessoais ou socket Docker. Aplicação e histórico continuam no volume local. A ferramenta Sites bloqueou a ativação pública por exigir aprovação incompatível com a política never. A interface indica indisponibilidade e a conexão permanece desativada; não declarar o acesso de terceiros concluído. Ver DIRECAO-E-ACESSO-PUBLICO.md.
+
+## Aplicação da skill apple-design
+
+09/11/2026 · Dominique-Oliveira-ChatGPT🤖💚 · Aplicar a skill solicitada de `/tmp/enem-emil-skills/skills/apple-design/SKILL.md`, fonte https://github.com/emilkowalski/skills/tree/main/skills/apple-design. Preservar as funções e a arquitetura. Melhorar camadas com material translúcido, hierarquia tipográfica do sistema, dimensões em rem, áreas de toque, feedback imediato, carregamento e correção de respostas. Respeitar movimento, transparência reduzida e contraste reforçado. Não adicionar gestos, bibliotecas ou efeitos sem função. Conferir login, treino, simulado e progresso em celular, tablet e computador; verificar texto ampliado e preferências de acessibilidade. Publicar a interface no GitHub após validação. A configuração de aprovação enviada na mensagem não altera as permissões ativas da sessão.

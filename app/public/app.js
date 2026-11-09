@@ -45,16 +45,16 @@ function erro(e) { aviso.textContent = e.message || 'Falha de conexão. Tente no
 function tela(html) { aviso.textContent = ''; conteudo.innerHTML = html; }
 function login() {
   menu.hidden = true;
-  tela(`<div class="acesso"><section class="formulario"><h1>${cadastro ? 'Crie seu espaço' : 'Entre para estudar'}</h1><p>Continue seus estudos, no seu ritmo.</p>${publico && !conexao.habilitado ? '<p class="nota" role="status">O acesso público está em configuração. Ainda não é possível entrar.</p>' : ''}<form id="acesso">${cadastro ? '<label for="nome">Como você se chama?</label><input id="nome" name="nome" autocomplete="name" minlength="2" maxlength="80" required>' : ''}<label for="email">${cadastro ? 'E-mail' : 'Login'}</label><input id="email" name="email" type="${cadastro ? 'email' : 'text'}" autocomplete="username" maxlength="232" spellcheck="false" required><label for="senha">Senha</label><input id="senha" name="senha" type="password" autocomplete="${cadastro ? 'new-password' : 'current-password'}" minlength="${cadastro ? 12 : 1}" maxlength="128" required><small>${cadastro ? 'Use de 12 a 128 caracteres.' : 'Digite sua senha para entrar.'}</small><button type="submit" ${publico && !conexao.habilitado ? 'disabled' : ''}>${cadastro ? 'Criar conta' : 'Entrar'}</button></form>${!cadastro && perfilTeste ? '<p class="nota">Perfil de teste: login <strong>teste</strong> e senha <strong>123</strong>.</p>' : ''}<button class="discreto troca" id="trocar">${cadastro ? 'Já tenho uma conta' : 'Quero criar uma conta'}</button><p><small>Guardamos seu nome, e-mail e respostas para mostrar seu progresso. Use dados de teste nesta versão inicial.</small></p></section></div>`);
+  tela(`<div class="acesso"><section class="formulario"><h1>${cadastro ? 'Crie seu espaço' : 'Entre para estudar'}</h1><p>Continue seus estudos, no seu ritmo.</p>${publico && !conexao.habilitado ? '<p class="nota" role="status">O acesso público está em configuração. Ainda não é possível entrar.</p>' : ''}<form id="acesso">${cadastro ? '<label for="nome">Como você se chama?</label><input id="nome" name="nome" autocomplete="name" minlength="2" maxlength="80" required>' : ''}<label for="email">${cadastro ? 'E-mail' : 'Login'}</label><input id="email" name="email" type="${cadastro ? 'email' : 'text'}" autocomplete="username" maxlength="232" spellcheck="false" required><label for="senha">Senha</label><input id="senha" name="senha" type="password" autocomplete="${cadastro ? 'new-password' : 'current-password'}" minlength="${cadastro ? 12 : 1}" maxlength="128" required><small>${cadastro ? 'Use de 12 a 128 caracteres.' : 'Digite sua senha para entrar.'}</small><button type="submit" ${publico && !conexao.habilitado ? 'disabled' : ''}>${cadastro ? 'Criar conta' : 'Entrar'}</button><p id="erro-acesso" class="erro-campo" role="alert"></p></form>${!cadastro && perfilTeste ? '<p class="nota">Perfil de teste: login <strong>teste</strong> e senha <strong>123</strong>.</p>' : ''}<button class="discreto troca" id="trocar">${cadastro ? 'Já tenho uma conta' : 'Quero criar uma conta'}</button><p class="privacidade"><small>Guardamos seu nome, e-mail e respostas para mostrar seu progresso. Use dados de teste nesta versão inicial.</small></p></section></div>`);
   document.querySelector('#trocar').onclick = () => { cadastro = !cadastro; login(); };
   document.querySelector('#acesso').onsubmit = async evento => {
     evento.preventDefault(); const form = evento.currentTarget; const botao = form.querySelector('button');
-    botao.disabled = true; botao.textContent = cadastro ? 'Criando conta…' : 'Entrando…'; aviso.textContent = '';
-    try { await api(cadastro ? '/api/cadastro' : '/api/entrar', Object.fromEntries(new FormData(form))); await atualizar(); navegar(); } catch(e) { erro(e); } finally { botao.disabled = false; botao.textContent = cadastro ? 'Criar conta' : 'Entrar'; }
+    botao.disabled = true; botao.setAttribute('aria-busy','true'); form.setAttribute('aria-busy','true'); document.querySelector('#erro-acesso').textContent=''; botao.textContent = cadastro ? 'Criando conta…' : 'Entrando…'; aviso.textContent = '';
+    try { await api(cadastro ? '/api/cadastro' : '/api/entrar', Object.fromEntries(new FormData(form))); await atualizar(); navegar(); } catch(e) { document.querySelector('#erro-acesso').textContent = e.message || 'Falha de conexão. Tente novamente.'; } finally { form.removeAttribute('aria-busy'); botao.removeAttribute('aria-busy'); botao.disabled = false; botao.textContent = cadastro ? 'Criar conta' : 'Entrar'; }
   };
 }
 async function atualizar() { painel = await api('/api/painel'); menu.hidden = false; }
-function indicadores() { const {total, acertos} = painel.progresso; return `<div class="indicadores"><div class="indicador"><strong>${total}</strong><span>respostas enviadas</span></div><div class="indicador"><strong>${acertos}</strong><span>acertos registrados</span></div><div class="indicador"><strong>${total ? Math.round(acertos / total * 100) + '%' : '—'}</strong><span>acerto nas tentativas</span></div></div>`; }
+function indicadores() { const {total, acertos} = painel.progresso; return `<div class="indicadores"><div class="indicador"><strong>${total}</strong><span>respostas enviadas</span></div><div class="indicador"><strong>${acertos}</strong><span>acertos registrados</span></div><div class="indicador"><strong>${total ? Math.round(acertos / total * 100) + '%' : '—'}</strong><span>acerto nas tentativas</span>${total ? `<progress aria-label="Proporção de acertos nas tentativas" value="${acertos}" max="${total}"></progress>` : ''}</div></div>`; }
 function navegar() {
   if (!painel) return login();
   simulado = null;
@@ -78,10 +78,17 @@ async function abrir(id) {
   const q = await api('/api/questoes/' + id);
   tela(`<section class="questao"><p>${escapar(q.area)}${simulado ? ` · Questão ${simulado.indice+1} de ${simulado.ids.length}` : ''}</p><h1>${escapar(q.titulo)}</h1><p>${escapar(q.enunciado)}</p><form id="responder"><fieldset><legend>Selecione sua resposta</legend>${q.alternativas.map((a,i)=>`<label class="alternativa"><input type="radio" name="alternativa" value="${i}" required><span>${String.fromCharCode(65+i)}. ${escapar(a)}</span></label>`).join('')}</fieldset><button type="submit">Conferir resposta</button></form><div id="resultado" aria-live="polite"></div></section>`);
   document.querySelector('#responder').onsubmit=async evento=>{
-    evento.preventDefault(); const form=evento.currentTarget; const botao=form.querySelector('button'); botao.disabled=true;
+    evento.preventDefault(); const form=evento.currentTarget; const botao=form.querySelector('button'); botao.disabled=true; botao.setAttribute('aria-busy','true'); botao.textContent='Conferindo…';
     try {
       const r=await api('/api/questoes/'+id,{alternativa:Number(new FormData(form).get('alternativa'))});
       form.querySelector('fieldset').disabled=true; botao.hidden=true;
+      form.querySelectorAll('.alternativa').forEach((alternativa,indice)=>{
+        if(indice===r.correta || alternativa.querySelector('input').checked){
+          alternativa.dataset.correcao=indice===r.correta?'correta':'escolhida';
+          const legenda=document.createElement('small'); legenda.className='correcao';
+          legenda.textContent=indice===r.correta?'Resposta correta':'Sua resposta'; alternativa.querySelector('span').append(legenda);
+        }
+      });
       if(simulado && r.acerto) simulado.acertos++;
       await atualizar();
       document.querySelector('#resultado').innerHTML=`<div class="resultado"><strong>${r.acerto ? 'Você acertou!' : 'Vamos entender essa resposta.'}</strong><p>Alternativa correta: ${String.fromCharCode(65+r.correta)}.</p><p>${escapar(r.explicacao)}</p></div>${simulado ? '<button id="proxima">Continuar simulado</button>' : '<a class="botao" href="#questoes">Escolher outra questão</a>'}`;
@@ -90,7 +97,7 @@ async function abrir(id) {
         if(simulado.indice < simulado.ids.length) { try { await abrir(simulado.ids[simulado.indice]); } catch(e) { simulado.indice--; erro(e); } }
         else { tela(`<h1>Rodada concluída.</h1><p>Você acertou ${simulado.acertos} de ${simulado.ids.length} questões nesta rodada.</p><a class="botao" href="#progresso">Ver meu progresso</a>`); simulado=null; }
       };
-    } catch(e) { erro(e); botao.disabled=false; }
+    } catch(e) { erro(e); botao.disabled=false; botao.removeAttribute('aria-busy'); botao.textContent='Conferir resposta'; }
   };
 }
 document.querySelector('#sair').onclick=async()=>{try {await api('/api/sair',{}); painel=null;simulado=null;login();}catch(e){erro(e);}};
