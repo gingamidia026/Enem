@@ -20,6 +20,7 @@ case "${1:-ligar}" in
     if ! docker info >/dev/null 2>&1; then
       systemctl --user start docker.service
     fi
+    python3 "$PASTA_VPT/scripts/corrigir-questoes.py" --aplicar
     python3 "$PASTA_VPT/scripts/sincronizar-questoes.py"
     docker build -f ambiente/Dockerfile -t pu-individual:local .
     python3 "$PASTA_VPT/gerenciador/iniciar.py"
