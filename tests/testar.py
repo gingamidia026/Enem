@@ -3,6 +3,7 @@ import http.cookiejar
 import json
 import os
 from pathlib import Path
+from questoes_sinteticas import QUESTOES as QUESTOES_TESTE
 import socket
 import subprocess
 import tempfile
@@ -17,11 +18,13 @@ class Testes(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.pasta = tempfile.TemporaryDirectory()
+        cls.catalogo = str(Path(cls.pasta.name)/'catalogo.json')
+        Path(cls.catalogo).write_text(json.dumps({'formato':1,'questoes':QUESTOES_TESTE,'anuladas':0,'revisar':0,'versao':'fixture'}))
         with socket.socket() as s:
             s.bind(('127.0.0.1', 0))
             porta = s.getsockname()[1]
         cls.origem = f'http://127.0.0.1:{porta}'
-        cls.processo = subprocess.Popen(['python3', str(RAIZ/'app/servidor.py')], stdout=subprocess.DEVNULL, env={**os.environ, 'DADOS':cls.pasta.name, 'PORTA':str(porta), 'ORIGEM':getattr(cls, 'origem_cabecalho', cls.origem), 'PERFIL_TESTE':getattr(cls,'perfil','0'), **getattr(cls,'ambiente_extra',{})})
+        cls.processo = subprocess.Popen(['python3', str(RAIZ/'app/servidor.py')], stdout=subprocess.DEVNULL, env={**os.environ, 'DADOS':cls.pasta.name, 'CATALOGO':cls.catalogo, 'PORTA':str(porta), 'ORIGEM':getattr(cls, 'origem_cabecalho', cls.origem), 'PERFIL_TESTE':getattr(cls,'perfil','0'), **getattr(cls,'ambiente_extra',{})})
         for _ in range(100):
             try:
                 with urllib.request.urlopen(cls.origem+'/api/saude', timeout=1):
@@ -126,7 +129,7 @@ class PerfilTeste(unittest.TestCase):
         self.assertEqual(self.pedido(cliente, '/api/painel')[1]['conta']['nome'], 'Teste')
         self.assertEqual(self.pedido(cliente, '/api/questoes/1', {'alternativa':2})[0], 200)
         self.processo.terminate(); self.processo.wait()
-        self.__class__.processo = subprocess.Popen(['python3', str(RAIZ/'app/servidor.py')], env={**os.environ, 'DADOS':self.pasta.name, 'PORTA':self.origem.rsplit(':',1)[1], 'ORIGEM':self.origem, 'PERFIL_TESTE':'0'})
+        self.__class__.processo = subprocess.Popen(['python3', str(RAIZ/'app/servidor.py')], env={**os.environ, 'DADOS':self.pasta.name, 'CATALOGO':self.catalogo, 'PORTA':self.origem.rsplit(':',1)[1], 'ORIGEM':self.origem, 'PERFIL_TESTE':'0'})
         for _ in range(100):
             try:
                 with urllib.request.urlopen(self.origem+'/api/saude', timeout=1):

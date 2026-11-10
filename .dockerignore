@@ -7,3 +7,7 @@ tests
 .segredos
 conexao-publica
 .catalogo
+
+.venv-extracao
+.extracao
+ferramentas

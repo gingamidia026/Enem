@@ -79,6 +79,7 @@ E quinta alternativa
  def test_reinicio_automatico_com_docker_simulado(self):
   projeto=self.raiz/'projeto';(projeto/'scripts').mkdir(parents=True)
   shutil.copy(RAIZ/'vpt',projeto/'vpt');shutil.copy(RAIZ/'scripts/sincronizar-questoes.py',projeto/'scripts')
+  (projeto/'scripts/corrigir-questoes.py').write_text("print('Separador simulado; extração real tem suíte própria.')\n")
   # Este teste isola a sincronização; o gerenciador real tem teste Docker próprio.
   (projeto/'gerenciador').mkdir()
   (projeto/'gerenciador/iniciar.py').write_text("print('Gerenciador simulado para teste de sincronização.')\n")

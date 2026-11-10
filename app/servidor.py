@@ -17,6 +17,7 @@ from questoes import QUESTOES, CATALOGO, ARQUIVO_CATALOGO
 import base64
 from ambientes import AmbienteIndisponivel, ATIVO as INDIVIDUAIS, solicitar as ambiente, painel_individual
 from acompanhamento import preparar, ciclo, avancar, perfil
+from conjuntos import membros as membros_conjunto, responder as responder_conjunto
 
 DADOS = Path(os.environ.get('DADOS', '/dados'))
 DADOS.mkdir(parents=True, exist_ok=True)
@@ -142,7 +143,7 @@ class API(BaseHTTPRequestHandler):
         # Somente enunciados; gabarito e explicação continuam exclusivos da correção.
         painel = {'densidade': ciclo(con, conta['id'], QUESTOES), 'perfil': perfil(con, conta['id'], QUESTOES), 'conta': conta, 'progresso': dict(totais), 'questoes': [
             {k: q[k] for k in (['id','area','titulo'] if q.get('oficial') else ['id', 'area', 'titulo', 'enunciado', 'alternativas'])} for q in QUESTOES],
-            'catalogo': {'origem':'cofre','total':len(QUESTOES),'anuladas':CATALOGO['anuladas'],'revisar':CATALOGO['revisar'],'versao':CATALOGO['versao']} if CATALOGO is not None else {'origem':'demonstracao','total':len(QUESTOES)}}
+            'catalogo': {'origem':'cofre','total':len(QUESTOES),'anuladas':CATALOGO['anuladas'],'revisar':CATALOGO['revisar'],'versao':CATALOGO['versao']} if CATALOGO is not None else {'origem':'vazio','total':0}}
 
         return painel_individual(conta['id'], painel)
 
@@ -306,7 +307,11 @@ class API(BaseHTTPRequestHandler):
                 if not questao:
                     raise Erro(404, 'Questão não encontrada.')
                 if metodo == 'GET':
-                    return self.enviar(200, {k: v for k, v in questao.items() if k not in ['correta', 'explicacao', 'estatisticaOriginal']})
+                    def publica(q): return {k:v for k,v in q.items() if k not in ['correta','explicacao','estatisticaOriginal']}
+                    item=publica(questao)
+                    if questao.get('grupo'):
+                        item['grupoQuestoes']=[{k:v for k,v in publica(q).items() if k!='textoComum'} for q in membros_conjunto(questao,QUESTOES)]
+                    return self.enviar(200,item)
                 if dados.get('acao') == 'imagem':
                     indice, parte = dados.get('indice'), dados.get('parte')
                     imagens = questao.get('imagens', [])
@@ -323,6 +328,11 @@ class API(BaseHTTPRequestHandler):
                         imagem.seek(parte * 49152)
                         bloco = imagem.read(49152)
                     return self.enviar(200, {'bloco':base64.b64encode(bloco).decode(), 'partes':info['partes'], 'tipo':'image/png', 'hash':sha})
+                if questao.get('grupo'):
+                    self.limitar(con,'respostas:'+str(conta['id']),200)
+                    try: resultado=responder_conjunto(con,conta['id'],questao,QUESTOES,dados)
+                    except ValueError as e: raise Erro(400,str(e))
+                    return self.enviar(200,resultado)
                 alternativa = dados.get('alternativa')
                 if type(alternativa) is not int or not 0 <= alternativa < len(questao['alternativas']):
                     raise Erro(400, 'Selecione uma alternativa válida.')

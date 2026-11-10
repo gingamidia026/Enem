@@ -69,17 +69,21 @@ def sincronizar(cofre, destino):
                 if meta.get('anulada')=='true': anuladas+=1;continue
                 gabarito=meta.get('gabarito','')
                 if gabarito not in list('ABCDE'): raise ValueError('Gabarito ausente ou inválido')
-                if '\n## Texto' not in corpo: raise ValueError('Seção Texto ausente')
-                texto=corpo.split('\n## Texto',1)[1].strip()
-                marcas=list(re.finditer(r'^([A-E])[ \t]+',texto,re.M))[-5:]
+                if '\n## Texto\n' not in corpo: raise ValueError('Seção Texto ausente')
+                texto=corpo.split('\n## Texto\n',1)[1].strip()
+                comum=corpo.split('\n## Texto comum\n',1)[1].split('\n## Texto\n',1)[0].strip() if '\n## Texto comum\n' in corpo else ''
+                marcas=list(re.finditer(r'^([A-E])(?:[ \t]+|(?=\n|$))',texto,re.M))[-5:]
                 texto_parcial = [m[1] for m in marcas] != list('ABCDE')
+                if meta.get('extrator') == '2' and texto_parcial:
+                    raise ValueError('Questão corrigida sem alternativas completas')
                 alternativas = [f'Alternativa {letra} (veja a imagem original)' for letra in 'ABCDE'] if texto_parcial else [texto[m.end():marcas[i+1].start() if i<4 else len(texto)].strip() for i,m in enumerate(marcas)]
                 if not all(alternativas): raise ValueError('Alternativa vazia')
                 enunciado=texto.strip() if texto_parcial else texto[:marcas[0].start()].strip()
                 enunciado=re.sub(r'[\x00-\x08\x0b\x0c\x0e-\x1f]', '', enunciado)
                 if not enunciado: raise ValueError('Enunciado vazio')
                 refs=[]
-                for imagem in re.findall(r'!\[\[([^]|]+)',corpo.split('\n## Texto',1)[0]):
+                nomes=list(dict.fromkeys(re.findall(r'!\[\[([^]|]+)',corpo)))
+                for imagem in nomes:
                     if not re.fullmatch(r'[A-Za-z0-9_-]+\.png',imagem): raise ValueError('Nome de imagem inválido')
                     f=imagens/imagem
                     if f.is_symlink() or not f.resolve().is_relative_to(imagens.resolve()) or not f.is_file(): raise ValueError('Imagem ausente ou fora da pasta autorizada')
@@ -87,6 +91,11 @@ def sincronizar(cofre, destino):
                     if not dados.startswith(b'\x89PNG\r\n\x1a\n') or len(dados)>8*1024*1024: raise ValueError('PNG inválido ou acima de 8 MB')
                     sha=hashlib.sha256(dados).hexdigest();arquivos[sha]=dados
                     refs.append({'hash':sha,'tipo':'image/png','partes':(len(dados)+49151)//49152})
+                def midias_embutidas(t):
+                    return re.sub(r'!\[\[([^]|]+)(?:\|[^]]*)?\]\]',lambda m:'[[midia:'+str(nomes.index(m[1]))+']]',t)
+                enunciado=midias_embutidas(enunciado)
+                alternativas=[midias_embutidas(a) for a in alternativas]
+                comum=midias_embutidas(comum)
                 if texto_parcial and not refs: raise ValueError('Extração parcial sem imagem original')
                 if chave not in registro:
                     if proximo > 999999: raise ValueError('Limite de identificadores atingido')
@@ -97,9 +106,24 @@ def sincronizar(cofre, destino):
                     'topico':meta.get('tópico',''),'assunto':meta.get('assunto',''),'conteudo':meta.get('conteúdo',''),
                     'revisar':revisar,'oficial':True,'enunciado':enunciado,'alternativas':alternativas,'correta':ord(gabarito)-65,
                     'explicacao':'Gabarito registrado no cofre a partir do caderno oficial. Ainda não há solução comentada para esta questão.',
-                    'imagens':refs,'textoParcial':texto_parcial,'fonte':f'https://download.inep.gov.br/enem/provas_e_gabaritos/{ano}_PV_impresso_D{dia}_CD{caderno}.pdf'})
+                    'imagens':refs,'textoParcial':texto_parcial,'textoComum':comum,'grupo':meta.get('grupo',''),
+                    'extrator':int(meta.get('extrator','1')),'origemArquivo':meta.get('origem_arquivo',''),
+                    'fonte':f'https://download.inep.gov.br/enem/provas_e_gabaritos/{ano}_PV_impresso_D{dia}_CD{caderno}.pdf'})
             except (KeyError, ValueError, TypeError, OSError) as e:
                 raise ValueError(f'{nota.name}: {e}. Catálogo anterior preservado.') from e
+        grupos={}
+        for q in itens:
+            if q['grupo']:
+                if not q['textoComum']: raise ValueError('Grupo sem texto comum')
+                grupos.setdefault(q['grupo'],[]).append(q)
+        for grupo, membros in grupos.items():
+            textos={q['textoComum'] for q in membros}
+            if len(textos)!=1: raise ValueError('Texto compartilhado inconsistente: '+grupo)
+            faixa=re.search(r':Q(\d+)a(\d+)$',grupo)
+            if not faixa or not set(range(int(faixa[1]),int(faixa[2])+1)).issubset({q['numero'] for q in membros}):
+                raise ValueError('Grupo incompleto: '+grupo)
+            ids=[q['id'] for q in sorted(membros,key=lambda q:q['numero'])]
+            for q in membros: q['grupoIds']=ids
         velho={q['chave'] for q in anterior.get('questoes',[])};novo={q['chave'] for q in itens}
         catalogo={'formato':1,'registro':registro,'questoes':itens,'anuladas':anuladas,'revisar':revisao}
         assinatura=json.dumps(catalogo,ensure_ascii=False,sort_keys=True).encode();catalogo['versao']=hashlib.sha256(assinatura).hexdigest()

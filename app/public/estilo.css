@@ -326,3 +326,9 @@ button,.botao { min-height: 44px; padding: .5rem .875rem; font-size: .875rem; fo
  .topo .menu button { font-size: .8125rem; margin: 0 0 0 4px; }
 }
 @media(max-width:380px) { .topo .marca strong { font-size: .8125rem; } }
+
+/* Mídias no trecho correspondente, inclusive alternativas e texto comum. */
+.midia-questao { display:block; margin:12px 0; max-width:100%; }
+.midia-questao img { display:block; max-width:100%; height:auto; }
+.texto-comum { margin-bottom:28px; }
+[data-questao] { margin-bottom:28px; }

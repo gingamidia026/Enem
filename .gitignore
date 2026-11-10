@@ -8,3 +8,6 @@ node_modules/
 conexao-publica/dist/
 conexao-publica/.sites/
 .catalogo/
+
+.venv-extracao/
+.extracao/

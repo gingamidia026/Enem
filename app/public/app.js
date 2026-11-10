@@ -162,7 +162,7 @@ function navegar() {
   } else if(pagina === '#progresso') {
     tela(`<h1>Seu progresso</h1>${indicadores()}${perfilAluno()}${densidades()}<p>${painel.progresso.total ? 'Cada tentativa faz parte do seu histórico. Repetir uma questão também conta como uma nova resposta.' : 'Responda à primeira questão do ciclo para começar seu histórico.'}</p><a class="botao" href="#questoes">Praticar questões</a><div class="nota">Esses números representam tentativas e acertos nesta plataforma. Não são previsão de desempenho no ENEM.</div>`);
   } else {
-    tela(`<p>Olá, ${escapar(painel.conta.nome)}.</p><h1>Continue seus estudos.</h1><p>Continue o ciclo de questões. Depois de responder, confira a alternativa correta e acompanhe seus acertos por assunto.</p><div class="acoes"><a class="botao" href="#questoes">Praticar agora</a><a class="botao discreto" href="#simulado">Fazer simulado curto</a><a class="botao discreto" href="#nota">Simular nota Enem</a></div>${indicadores()}<h2>Áreas do ciclo</h2><p>Matemática, Linguagens, Ciências Humanas e Ciências da Natureza.</p><div class="nota">${oficial ? `Banco do cofre com ${painel.questoes.length} questões disponíveis. Atualizado ao iniciar ou reiniciar o PU no PC.` : 'Catálogo inicial com conteúdo autoral demonstrativo. O banco de questões oficiais ainda não está incluído.'}</div>`);
+    tela(`<p>Olá, ${escapar(painel.conta.nome)}.</p><h1>Continue seus estudos.</h1><p>Continue o ciclo de questões. Depois de responder, confira a alternativa correta e acompanhe seus acertos por assunto.</p><div class="acoes"><a class="botao" href="#questoes">Praticar agora</a><a class="botao discreto" href="#simulado">Fazer simulado curto</a><a class="botao discreto" href="#nota">Simular nota Enem</a></div>${indicadores()}<h2>Áreas do ciclo</h2><p>Matemática, Linguagens, Ciências Humanas e Ciências da Natureza.</p><div class="nota">${oficial ? `Banco do cofre com ${painel.questoes.length} questões disponíveis. Atualizado ao iniciar ou reiniciar o PU no PC.` : 'Nenhuma questão foi sincronizada. Inicie o PU no PC para carregar o banco do cofre.'}</div>`);
   }
   ligarDensidade();
 }
@@ -170,55 +170,67 @@ async function abrir(id) {
   aviso.textContent = 'Carregando questão…';
   const conhecida = painel?.questoes.find(q=>q.id===id);
   const q = conhecida?.enunciado && conhecida?.alternativas ? conhecida : await api('/api/questoes/' + id);
-  tela(`<section class="questao" aria-label="Folha de questões"><div class="cabecalho-prova"><strong>Pé na Universidade</strong><span>${simulado ? 'Simulado curto' : 'Caderno de prática'}</span></div><p class="dados-questao">${escapar(q.area)}${simulado ? ` · Questão ${simulado.indice+1} de ${simulado.ids.length}` : ''}</p><h1>${escapar(q.titulo)}</h1>${q.oficial ? `<p class="secundario">${escapar(q.materia)}${q.revisar ? ' · Classificação de assunto em revisão' : ''}</p>` : ''}<p class="enunciado">${escapar(q.enunciado)}</p>${q.imagens?.length ? `<div class="originais"><p>${q.textoParcial ? 'A extração do texto não preservou todas as alternativas. A imagem original será carregada antes de responder.' : 'Consulte a imagem original para conferir figuras, tabelas e fórmulas.'}</p><p id="estado-original" role="status"></p><div id="imagens-originais"></div></div>` : ''}${q.fonte ? `<p><a href="${escapar(q.fonte)}" target="_blank" rel="noopener noreferrer">Abrir caderno oficial no Inep</a></p>` : ''}<form id="responder"><fieldset><legend>Selecione sua resposta</legend>${q.alternativas.map((a,i)=>`<label class="alternativa"><input type="radio" name="alternativa" value="${i}" required><span>${String.fromCharCode(65+i)}. ${escapar(a)}</span></label>`).join('')}</fieldset><button type="submit" ${q.textoParcial ? 'disabled' : ''}>Conferir resposta</button></form><div id="resultado" aria-live="polite"></div></section>`);
+  const questoes=q.grupoQuestoes || [q];
+  const conjunto=Boolean(q.grupo);
+  const render=(texto, item)=>escapar(texto || '').replace(/\[\[midia:(\d+)\]\]/g,(_,i)=>`<span class="midia-questao" data-midia="${item.id}-${Number(i)}"></span>`);
+  const pergunta=item=>`<section data-questao="${item.id}">${conjunto?`<h2>${escapar(item.titulo)}</h2>`:''}<div class="enunciado">${render(item.enunciado,item)}</div><fieldset data-resposta="${item.id}"><legend>Selecione sua resposta</legend>${item.alternativas.map((a,i)=>`<label class="alternativa"><input type="radio" name="alternativa-${item.id}" value="${i}" required><span>${String.fromCharCode(65+i)}. ${render(a,item)}</span></label>`).join('')}</fieldset><div data-correcao="${item.id}"></div></section>`;
+  const temImagens=questoes.some(item=>item.imagens?.length);
+  tela(`<section class="questao" aria-label="Folha de questões"><div class="cabecalho-prova"><strong>Pé na Universidade</strong><span>${conjunto?'Perguntas com texto compartilhado':(simulado?'Simulado curto':'Caderno de prática')}</span></div><p class="dados-questao">${escapar(q.area)}</p><h1>${conjunto?`${questoes.length} perguntas para responder juntas`:escapar(q.titulo)}</h1>${conjunto?'<p>Leia o texto e selecione uma resposta em cada pergunta. O envio é conjunto; cada pergunta conta individualmente.</p>':''}${q.textoComum?`<div class="texto-comum enunciado">${render(q.textoComum,q)}</div>`:''}<form id="responder">${questoes.map(pergunta).join('')}<button type="submit" ${temImagens?'disabled':''}>${conjunto?'Conferir todas as respostas':'Conferir resposta'}</button></form>${temImagens?'<div class="originais"><p id="estado-original" role="status"></p><div id="imagens-originais"></div></div>':''}<div id="resultado" aria-live="polite"></div></section>`);
   const envio=crypto.randomUUID();
-  let alternativaEnviada=null;
-  const carregarImagens = async()=>{
+  let respostasEnviadas=null;
+  const form=document.querySelector('#responder');
+  const carregarImagens=async()=>{
     const destino=document.querySelector('#imagens-originais');
     const estado=document.querySelector('#estado-original');
     try {
       destino.replaceChildren();
-      for(let indice=0;indice<q.imagens.length;indice++) {
-        const info=q.imagens[indice];const blocos=[];
-        for(let inicio=0;inicio<info.partes;inicio+=3) {
-          estado.textContent=`Carregando imagem ${indice+1} de ${q.imagens.length}, parte ${inicio+1} de ${info.partes}…`;
-          const partes=await Promise.all(Array.from({length:Math.min(3,info.partes-inicio)},(_,j)=>api('/api/questoes/'+id,{acao:'imagem',indice,parte:inicio+j})));
-          if(!destino.isConnected) return;
-          partes.forEach(parte=>blocos.push(parte.bloco));
+      const cache=new Map();
+      for(const item of questoes) for(let indice=0;indice<(item.imagens?.length || 0);indice++) {
+        const info=item.imagens[indice];
+        const chave=info.hash || `${item.id}-${indice}`;
+        if(!cache.has(chave)) {
+          const blocos=[];
+          for(let inicio=0;inicio<info.partes;inicio+=3) {
+            estado.textContent='Carregando as figuras, tabelas e fórmulas…';
+            const partes=await Promise.all(Array.from({length:Math.min(3,info.partes-inicio)},(_,j)=>api('/api/questoes/'+item.id,{acao:'imagem',indice,parte:inicio+j})));
+            if(!destino.isConnected)return;
+            partes.forEach(parte=>blocos.push(parte.bloco));
+          }
+          const imagem=document.createElement('img');imagem.alt=`Figura, tabela ou fórmula da ${item.titulo}`;
+          imagem.src='data:image/png;base64,'+blocos.join('');await imagem.decode();cache.set(chave,imagem);
         }
-        const imagem=document.createElement('img');imagem.alt=`Imagem original ${indice+1} da questão ${q.titulo}`;
-        imagem.src='data:image/png;base64,'+blocos.join('');
-        await imagem.decode();
-        if(!destino.isConnected) return;
-        destino.append(imagem);
+        if(!destino.isConnected)return;
+        const lugares=document.querySelectorAll(`[data-midia="${item.id}-${indice}"]`);
+        lugares.forEach(lugar=>lugar.replaceChildren(cache.get(chave).cloneNode()));
+        if(!lugares.length && item.extrator!==2)destino.append(cache.get(chave).cloneNode());
       }
-      estado.textContent='Imagens originais carregadas. Você pode conferir sua resposta.';
-      if(q.textoParcial && alternativaEnviada===null) destino.closest('.questao').querySelector('#responder button[type=submit]').disabled=false;
-    } catch(e) {if(estado.isConnected) estado.textContent=mensagemErro(e);}
+      estado.textContent='Imagens carregadas.';form.querySelector('button[type=submit]').disabled=false;
+    }catch(e){if(estado.isConnected){estado.textContent='Não foi possível carregar as imagens. ';const tentar=document.createElement('button');tentar.type='button';tentar.textContent='Tentar novamente';tentar.onclick=()=>void carregarImagens();estado.append(tentar);}}
   };
-  if(q.imagens?.length) void carregarImagens();
-  document.querySelector('#responder').onsubmit=async evento=>{
-    evento.preventDefault(); const form=evento.currentTarget; const botao=form.querySelector('button'); botao.disabled=true; botao.setAttribute('aria-busy','true'); botao.textContent='Conferindo…';
+  if(temImagens)void carregarImagens();
+  form.onsubmit=async evento=>{
+    evento.preventDefault();const botao=form.querySelector('button[type=submit]');botao.disabled=true;botao.textContent='Conferindo…';
     try {
-      alternativaEnviada ??= Number(new FormData(form).get('alternativa'));
-      const r=await api('/api/questoes/'+id,{alternativa:alternativaEnviada,envio});
-      form.querySelector('fieldset').disabled=true; botao.hidden=true;
-      form.querySelectorAll('.alternativa').forEach((alternativa,indice)=>{
-        if(indice===r.correta || alternativa.querySelector('input').checked){
-          alternativa.dataset.correcao=indice===r.correta?'correta':'escolhida';
-          const legenda=document.createElement('small'); legenda.className='correcao';
-          legenda.textContent=indice===r.correta?'Resposta correta':'Sua resposta'; alternativa.querySelector('span').append(legenda);
-        }
-      });
-      if(simulado && r.acerto) simulado.acertos++;
+      respostasEnviadas ??= questoes.map(item=>({id:item.id,alternativa:Number(new FormData(form).get('alternativa-'+item.id))}));
+      const r=await api('/api/questoes/'+id,conjunto?{respostas:respostasEnviadas,envio}:{alternativa:respostasEnviadas[0].alternativa,envio});
+      const resultados=r.resultados || [{...r,id}];
+      form.querySelectorAll('fieldset').forEach(campo=>campo.disabled=true);botao.hidden=true;
+      for(const resultado of resultados) {
+        const secao=form.querySelector(`[data-questao="${resultado.id}"]`);
+        secao.querySelectorAll('.alternativa').forEach((alternativa,indice)=>{
+          if(indice===resultado.correta || alternativa.querySelector('input').checked){alternativa.dataset.correcao=indice===resultado.correta?'correta':'escolhida';const legenda=document.createElement('small');legenda.className='correcao';legenda.textContent=indice===resultado.correta?'Resposta correta':'Sua resposta';alternativa.querySelector('span').append(legenda);}
+        });
+        secao.querySelector('[data-correcao]').innerHTML=`<p><strong>${resultado.acerto?'Você acertou!':'Confira a correção.'}</strong> Alternativa correta: ${String.fromCharCode(65+resultado.correta)}.</p><p>${escapar(resultado.explicacao)}</p>`;
+      }
+      if(simulado){simulado.acertos+=resultados.filter(r=>r.acerto).length;simulado.respondidas=(simulado.respondidas||0)+resultados.length;}
       if(r.acompanhamento){painel.densidade=r.acompanhamento.densidade;painel.perfil=r.acompanhamento.perfil;painel.progresso=r.progresso;}
-      document.querySelector('#resultado').innerHTML=`<div class="resultado"><strong>${r.acerto ? 'Você acertou!' : 'Confira a correção.'}</strong><p>Alternativa correta: ${String.fromCharCode(65+r.correta)}.</p><p>${escapar(r.explicacao)}</p><p>Alternativa mais escolhida na aplicação original: dado indisponível. Pesquisa nos microdados do Inep pendente para este item.</p>${r.densidadeConcluida?'<p role="status"><strong>Densidade concluída: você respondeu às questões de todas as matérias deste ciclo.</strong></p>':''}</div>${simulado ? '<button id="proxima">Continuar simulado</button>' : '<a class="botao" href="#questoes">Continuar densidade</a>'}`;
-      if(simulado) document.querySelector('#proxima').onclick=async()=>{
-        simulado.indice++;
-        if(simulado.indice < simulado.ids.length && painel.densidade.proxima) { try { await abrir(painel.densidade.proxima); } catch(e) { simulado.indice--; erro(e); } }
-        else { tela(`<h1>Rodada concluída.</h1><p>Você acertou ${simulado.acertos} de ${simulado.ids.length} questões nesta rodada.</p><a class="botao" href="#progresso">Ver meu progresso</a>`); simulado=null; }
+      document.querySelector('#resultado').innerHTML=`${r.densidadeConcluida?'<p role="status"><strong>Densidade concluída.</strong></p>':''}${simulado?'<button id="proxima">Continuar simulado</button>':'<a class="botao" href="#questoes">Continuar densidade</a>'}`;
+      if(simulado)document.querySelector('#proxima').onclick=async()=>{
+        simulado.indice=simulado.respondidas;
+        if(simulado.indice<simulado.ids.length && painel.densidade.proxima){try{await abrir(painel.densidade.proxima);}catch(e){erro(e);}}
+        else{tela(`<h1>Rodada concluída.</h1><p>Você acertou ${simulado.acertos} de ${simulado.respondidas} questões nesta rodada.</p><a class="botao" href="#progresso">Ver meu progresso</a>`);simulado=null;}
       };
-    } catch(e) { erro(e); botao.disabled=false; botao.removeAttribute('aria-busy'); botao.textContent='Conferir resposta'; }
+    }catch(e){erro(e);botao.disabled=false;botao.textContent=conjunto?'Conferir todas as respostas':'Conferir resposta';}
   };
 }
 document.querySelector('#sair').onclick=async()=>{try {await api('/api/sair',{}); painel=null;simulado=null;login();}catch(e){erro(e);}};

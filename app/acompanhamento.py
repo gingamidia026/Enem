@@ -44,6 +44,20 @@ def avancar(con, conta, questao, questoes):
         con.execute('UPDATE ciclos SET ids=? WHERE conta=?',(json.dumps(ids),conta))
     return terminou
 
+def avancar_conjunto(con, conta, ids, questoes):
+    estado=ciclo(con,conta,questoes)
+    if estado['proxima'] not in ids: return False
+    r=con.execute('SELECT * FROM ciclos WHERE conta=?',(conta,)).fetchone()
+    previstos=json.loads(r['ids']); feitos=set(json.loads(r['feitos']))
+    feitos.update(i for i in ids if i in previstos)
+    terminou=bool(previstos) and len(feitos)==len(previstos)
+    con.execute('UPDATE ciclos SET feitos=?,concluidos=concluidos+? WHERE conta=?',
+                (json.dumps([] if terminou else sorted(feitos)),int(terminou),conta))
+    if terminou:
+        ids=[q['id'] for q in sorted(questoes,key=lambda q:(materia(q)!='Português',materia(q),assunto(q),q['id']))]
+        con.execute('UPDATE ciclos SET ids=? WHERE conta=?',(json.dumps(ids),conta))
+    return terminou
+
 def perfil(con,conta,questoes,agora=None):
     agora=agora or datetime.now(timezone.utc)
     inicio=(agora-timedelta(days=agora.weekday())).replace(hour=0,minute=0,second=0,microsecond=0)
