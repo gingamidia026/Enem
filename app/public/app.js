@@ -68,10 +68,11 @@ async function transportar(caminho, dados) {
   const envio = await fetch(conexao.intermediario + '/pedido', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({metodo: dados === undefined ? 'GET' : 'POST', caminho, dados, token: sessao}), signal: AbortSignal.timeout(12000)});
   const recibo = await envio.json();
   if (!envio.ok) throw new Error(recibo.erro || 'A plataforma está temporariamente indisponível.');
-  const inicio = Date.now();
+  const inicio = Date.now(); let consultas = 0;
   while (Date.now() - inicio < 30000) {
-    // Consulta curta no começo, quando a resposta costuma chegar; depois espaça para não gastar a rede.
-    await new Promise(r => setTimeout(r, Date.now() - inicio < 3000 ? 300 : 600));
+    // O conector leva perto de 1 s para buscar e devolver o pedido: a primeira consulta espera esse tempo,
+    // as seguintes são curtas e depois espaçam, para não gastar a cota do intermediário à toa.
+    await new Promise(r => setTimeout(r, consultas++ === 0 ? 900 : Date.now() - inicio < 4000 ? 250 : 600));
     const resposta = await fetch(conexao.intermediario + '/resultado/' + recibo.id, {headers: {Authorization: 'Bearer ' + recibo.recibo}, signal: AbortSignal.timeout(10000)});
     const corpo = await resposta.json();
     if (resposta.status === 202) continue;
@@ -245,8 +246,8 @@ function carregarImagem(item, indice) {
   if (!imagens.has(chave)) {
     const promessa = (async () => {
       const blocos = [];
-      for (let inicio = 0; inicio < info.partes; inicio += 3) {
-        const partes = await Promise.all(Array.from({length: Math.min(3, info.partes - inicio)}, (_, j) => parteDaFigura(item.id, indice, inicio + j)));
+      for (let inicio = 0; inicio < info.partes; inicio += 5) {
+        const partes = await Promise.all(Array.from({length: Math.min(5, info.partes - inicio)}, (_, j) => parteDaFigura(item.id, indice, inicio + j)));
         partes.forEach(parte => blocos.push(parte.bloco));
       }
       return 'data:image/png;base64,' + blocos.join('');
@@ -431,11 +432,12 @@ function verMarco() {
   const area = $('#area-questao'); const e = painel.estudo; const vencidas = e.revisao.vencidas.length;
   const primeira = prefs.alvo.valor <= prefs.meta; const dias = e.semana.filter(n => n > 0).length;
   estado.atual = null;
-  area.innerHTML = `<section class="marco"><h2>${primeira ? 'Meta de hoje cumprida.' : 'Bloco concluído.'}</h2><p>Você respondeu ${plural(e.hoje.respostas, 'questão', 'questões')} hoje e acertou ${e.hoje.acertos}. ${dias > 1 ? `É o seu ${dias}º dia de estudo nesta semana.` : ''}</p><p class="secundario">Parar aqui é uma boa escolha: o que você errou ou chutou volta na revisão nos próximos dias.${primeira && publico && !matchMedia('(display-mode: standalone)').matches ? ' Para voltar amanhã com um toque, use “Adicionar à tela inicial” no menu do navegador.' : ''}</p><div class="acoes"><button type="button" id="mais-cinco">Mais 5 questões</button>${vencidas && estado.modo !== 'revisao' ? `<button type="button" class="discreto" id="ir-revisao">Revisar ${plural(vencidas, 'questão', 'questões')}</button>` : ''}<a class="botao discreto" id="encerrar" href="#progresso">Encerrar por hoje</a></div></section>`;
+  area.innerHTML = `<section class="marco"><h2>${primeira ? 'Meta de hoje cumprida.' : 'Bloco concluído.'}</h2><p>Você respondeu ${plural(e.hoje.respostas, 'questão', 'questões')} hoje e acertou ${e.hoje.acertos}. ${dias > 1 ? `É o seu ${dias}º dia de estudo nesta semana.` : ''}</p><p class="secundario">Parar aqui é uma boa escolha: o que você errou ou chutou volta na revisão nos próximos dias.${primeira && publico && !matchMedia('(display-mode: standalone)').matches ? ' Para voltar amanhã com um toque, use “Adicionar à tela inicial” no menu do navegador.' : ''}</p><div class="acoes"><button type="button" id="mais-cinco">Mais 5 questões</button>${vencidas && estado.modo !== 'revisao' ? `<button type="button" class="discreto" id="ir-revisao">Revisar ${plural(vencidas, 'questão', 'questões')}</button>` : '<a class="botao discreto" id="ir-simulado" href="#simulado">Fazer um simulado curto</a>'}<a class="botao discreto" id="encerrar" href="#progresso">Encerrar por hoje</a></div>${primeira ? '<p class="secundario lembrar">Quer um aviso para amanhã? <a href="#conta">Crie um lembrete diário</a> no calendário do celular.</p>' : ''}</section>`;
   const seguir = bloco => { prefs.alvo.valor = painel.estudo.hoje.respostas + 5; prefs.alvo.bloco = bloco; salvarPrefs(); };
   $('#mais-cinco').onclick = () => { seguir(true); verEstudo(); };
   if ($('#ir-revisao')) $('#ir-revisao').onclick = () => { seguir(true); estado.modo = 'revisao'; prefs.foco = null; salvarPrefs(); verEstudo(); };
   $('#encerrar').onclick = () => seguir(false);
+  if ($('#ir-simulado')) $('#ir-simulado').onclick = () => seguir(false);
   estado.aoTeclar = evento => { if (evento.key === 'Enter' && !evento.target.closest('button,a')) { evento.preventDefault(); $('#mais-cinco').click(); } };
   $('.marco h2').tabIndex = -1; $('.marco h2').focus({preventScroll: true});
 }
@@ -546,7 +548,7 @@ ${temImagens ? '<div class="originais"><p id="estado-original" class="secundario
   $('#pular', area).onclick = () => { itens.forEach(item => estado.puladas.add(item.id)); if (estado.primeira === q.id) estado.primeira = null; subir(); abrirProxima(); };
   const enviar = async chute => {
     if (enviando || !completo() || !figurasProntas) return;
-    enviando = true; liberar(); conferir.textContent = 'Conferindo…'; retorno.textContent = '';
+    enviando = true; liberar(); conferir.textContent = 'Conferindo…'; conferir.classList.add('esperando'); retorno.textContent = '';
     enviadas ??= itens.map(item => ({id: item.id, alternativa: marcada(item)}));
     // Depois do primeiro envio a alternativa fica travada: se a resposta chegou ao servidor, o reenvio é o mesmo.
     $$('fieldset', form).forEach(campo => campo.disabled = true);
@@ -569,7 +571,7 @@ ${temImagens ? '<div class="originais"><p id="estado-original" class="secundario
       // A mesma chave de envio segue valendo: se a resposta chegou ao servidor, ela não é contada de novo.
       enviando = false;
       if (!form.isConnected) return;
-      conferir.textContent = 'Conferir'; liberar();
+      conferir.textContent = 'Conferir'; conferir.classList.remove('esperando'); liberar();
       retorno.innerHTML = `<p class="engano"><strong>Sua resposta não foi enviada.</strong> ${escapar(mensagemErro(e))} A alternativa marcada está guardada: toque em Conferir de novo.</p>`;
       anunciar('Sua resposta não foi enviada. Toque em Conferir de novo.'); mostrar(retorno);
     }
@@ -617,7 +619,7 @@ ${temImagens ? '<div class="originais"><p id="estado-original" class="secundario
     $$('.alternativa', secao)[escolhida].dataset.correcao = 'errada';
     campo.disabled = false;
     $$('input', campo).forEach((entrada, i) => { entrada.checked = false; entrada.disabled = i === escolhida; });
-    $('.correcao', secao).innerHTML = '<p class="engano"><strong>Não foi essa.</strong> Toque em outra alternativa para tentar mais uma vez, ou veja a resposta.</p>';
+    $('.correcao', secao).innerHTML = '<p class="engano"><strong>Não foi essa.</strong> Quer tentar outra antes de ver a resposta? Toque numa alternativa (não muda o seu resultado) ou em Ver resposta.</p>';
     barraAcao.innerHTML = '<button type="button" class="primaria" id="ver-resposta">Ver resposta</button>';
     anunciar('Não foi essa. Escolha outra alternativa para tentar mais uma vez, ou veja a resposta.');
     mostrar($('.correcao', secao)); $('input:not(:disabled)', campo)?.focus({preventScroll: true});
@@ -778,15 +780,32 @@ function verProgresso() {
   $$('[data-treinar-materia]').forEach(b => b.onclick = () => { estado.modo = 'misturado'; prefs.foco = {materia: b.dataset.treinarMateria, topico: b.dataset.treinarTopico}; ir(); });
 }
 
+// ---------- Lembrete diário ----------
+// O PU não envia notificações. O lembrete é um evento que se repete todo dia no calendário do próprio aparelho.
+function baixarLembrete(hora) {
+  const [h, m] = hora.split(':').map(Number); const dois = n => String(n).padStart(2, '0'); const d = new Date();
+  const dia = `${d.getFullYear()}${dois(d.getMonth() + 1)}${dois(d.getDate())}`; const fim = h * 60 + m + 10;
+  const carimbo = new Date().toISOString().replace(/[-:]/g, '').replace(/\.\d+/, '');
+  const endereco = location.origin + location.pathname;
+  const linhas = ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//Pe na Universidade//PU//PT-BR', 'BEGIN:VEVENT', `UID:pu-lembrete-${Date.now()}@pu`, `DTSTAMP:${carimbo}`,
+    `DTSTART:${dia}T${dois(h)}${dois(m)}00`, `DTEND:${dia}T${dois(Math.floor(fim / 60) % 24)}${dois(fim % 60)}00`, 'RRULE:FREQ=DAILY', `SUMMARY:PU: ${prefs.meta} questões de hoje`,
+    `DESCRIPTION:Abra o PU e responda a questão do dia: ${endereco}`, `URL:${endereco}`, 'BEGIN:VALARM', 'ACTION:DISPLAY', 'DESCRIPTION:Hora das questões do PU', 'TRIGGER:PT0M', 'END:VALARM', 'END:VEVENT', 'END:VCALENDAR'];
+  const arquivo = URL.createObjectURL(new Blob([linhas.join('\r\n')], {type: 'text/calendar'}));
+  const link = document.createElement('a'); link.href = arquivo; link.download = 'lembrete-pu.ics'; document.body.append(link); link.click(); link.remove();
+  setTimeout(() => URL.revokeObjectURL(arquivo), 10000);
+}
+
 // ---------- Conta, dispositivos e dados ----------
 async function verConta() {
   tela(`<h1>Sua conta</h1><p class="lide">${escapar(painel.conta.nome)}</p>
 <h2>Meta do dia</h2><p class="secundario">Quantas questões contam como o dia feito. Comece pequeno: dá para fazer mais quando quiser.</p><div class="modos" role="group" aria-label="Meta diária de questões">${[3, 5, 10, 20].map(n => `<button type="button" class="ficha" data-meta="${n}" aria-pressed="${prefs.meta === n}">${n} questões</button>`).join('')}</div>
 ${publico && !matchMedia('(display-mode: standalone)').matches ? '<h2>PU a um toque</h2><p class="secundario">No celular, abra o menu do navegador e escolha “Adicionar à tela inicial”. O PU vira um ícone e abre direto na questão do dia.</p>' : ''}
+<h2>Lembrete diário</h2><p class="secundario">O PU não envia notificações. Escolha um horário e baixe um evento que se repete todo dia; ao abrir o arquivo, ele entra no calendário do seu celular ou computador, com o aviso na hora marcada.</p><div class="lembrete"><label for="hora-lembrete">Horário</label><input id="hora-lembrete" type="time" value="${escapar(prefs.lembrete || '19:00')}"><button type="button" class="discreto" id="criar-lembrete">Baixar lembrete</button></div>
 <h2>Atalhos do teclado</h2><p class="secundario">No computador, as teclas A a E marcam a alternativa e Enter confere.</p><div class="modos" role="group" aria-label="Atalhos do teclado"><button type="button" class="ficha" id="atalhos" aria-pressed="${prefs.atalhos !== false}">Letras A a E ${prefs.atalhos !== false ? 'ligadas' : 'desligadas'}</button></div>
 <h2>Dispositivos autorizados</h2><p class="secundario">Um novo navegador é registrado quando você entra com a senha. Você pode manter até cinco. Revogar encerra as sessões daquele dispositivo.</p><div id="dispositivos"><p class="espera" role="status">Carregando dispositivos…</p></div>
 <h2>Dados e saída</h2><div class="acoes"><a class="botao discreto" href="#privacidade">Dados e segurança</a><button type="button" class="discreto" id="sair">Sair da conta</button></div>`);
   $$('[data-meta]').forEach(b => b.onclick = () => { prefs.meta = Number(b.dataset.meta); prefs.alvo = null; acertarAlvo(); $$('[data-meta]').forEach(x => x.setAttribute('aria-pressed', String(x === b))); aviso.textContent = `Meta do dia: ${prefs.meta} questões.`; });
+  $('#criar-lembrete').onclick = () => { const hora = $('#hora-lembrete').value; if (!/^\d{2}:\d{2}$/.test(hora)) { aviso.textContent = 'Escolha um horário para o lembrete.'; return; } prefs.lembrete = hora; salvarPrefs(); baixarLembrete(hora); aviso.textContent = `Lembrete das ${hora} baixado. Abra o arquivo para colocá-lo no calendário.`; };
   $('#atalhos').onclick = evento => { prefs.atalhos = prefs.atalhos === false; salvarPrefs(); evento.currentTarget.setAttribute('aria-pressed', String(prefs.atalhos)); evento.currentTarget.textContent = `Letras A a E ${prefs.atalhos ? 'ligadas' : 'desligadas'}`; };
   $('#sair').onclick = async () => {
     // Mesmo sem rede, o aparelho é limpo: num celular dividido, nada fica para a próxima pessoa.

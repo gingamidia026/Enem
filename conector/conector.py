@@ -12,8 +12,9 @@ from http.cookies import SimpleCookie
 REMOTO = os.environ.get('ENEM_INTERMEDIARIO', '').rstrip('/')
 CHAVE = ''
 ORIGEM = os.environ.get('ORIGEM', 'http://localhost:8088')
-# Parado, consulta a cada 2 s (metade dos pedidos de antes); com alguém estudando, a cada 0,4 s por 20 s.
-PAUSA_ATIVA, PAUSA_PARADA, JANELA_ATIVA = 0.4, 2.0, 20.0
+# Parado, consulta a cada 2 s (metade dos pedidos de antes); com alguém estudando, pausa de 0,25 s por 20 s.
+# Cada consulta ao intermediário leva perto de meio segundo por conta do banco dele; a pausa soma a isso.
+PAUSA_ATIVA, PAUSA_PARADA, JANELA_ATIVA = 0.25, 2.0, 20.0
 
 def permitido(metodo, caminho):
     return ((metodo == 'GET' and caminho in ['/api/configuracao', '/api/painel', '/api/dispositivos'])
@@ -71,8 +72,8 @@ def principal():
     CHAVE = Path('/run/secrets/chave').read_text().strip()
     print('Conector ENEM iniciado: somente conexões de saída; sem dados de pessoas nos registros.', flush=True)
     ultimo_pedido = 0.0
-    # Quatro pedidos por vez: as partes de uma figura não esperam uma pela outra.
-    with ThreadPoolExecutor(max_workers=4) as atendentes:
+    # Seis pedidos por vez: as partes de uma figura não esperam uma pela outra.
+    with ThreadPoolExecutor(max_workers=6) as atendentes:
         while True:
             try:
                 fila = remoto('/conector/retirar', {})

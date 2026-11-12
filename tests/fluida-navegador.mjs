@@ -285,6 +285,10 @@ await item('conta: meta do dia, dispositivos e saída que limpa o aparelho', asy
   await p.avaliar('location.hash = "#conta"'); await p.esperar('document.querySelector("[data-revogar]")');
   await p.clicar('[data-meta="3"]'); igual(await p.avaliar('JSON.parse(localStorage.getItem("pu.prefs.v1." + painel.conta.id)).meta'), 3, 'meta guardada por conta');
   certo((await p.texto('#dispositivos')).includes('este dispositivo'), 'dispositivo atual');
+  // Lembrete diário: arquivo de calendário gerado no aparelho, sem pedido ao servidor.
+  await p.avaliar('(() => { window.__ics = null; const original = URL.createObjectURL; URL.createObjectURL = b => { b.text().then(t => { window.__ics = t; }); return original.call(URL, b); }; HTMLAnchorElement.prototype.click = function () {}; })()');
+  await p.preencher('#hora-lembrete', '07:30'); await p.clicar('#criar-lembrete'); await p.esperar('window.__ics');
+  const ics = await p.avaliar('window.__ics'); certo(ics.includes('RRULE:FREQ=DAILY') && /DTSTART:\d{8}T073000/.test(ics) && /DTEND:\d{8}T074000/.test(ics) && ics.includes('BEGIN:VALARM'), 'evento diário às 07:30');
   if (CAPTURAS) await p.captura(path.join(CAPTURAS, 'conta-390.png'));
   await p.clicar('#sair'); await p.esperar('document.querySelector("#acesso")');
   igual(await p.avaliar('[localStorage.getItem("pu.painel.v2"), localStorage.getItem("pu.questoes.v2"), localStorage.getItem("pu.simulado.v2")]'), [null, null, null], 'aparelho limpo');
