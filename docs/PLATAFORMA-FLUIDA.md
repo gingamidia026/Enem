@@ -30,19 +30,22 @@ Nada aqui foi medido com estudantes reais do PU. São hipóteses de produto.
 6. **Leitura.** As quebras de linha do PDF viram parágrafos; versos, referência e comando ficam separados. É apresentação: o catálogo não é alterado.
 7. **Simulado curto.** Dez questões das quatro áreas, cronômetro, correção só no fim, retomada depois de sair.
 8. **Progresso que aponta o próximo passo.** Revisão vencida, assunto mais fraco ou continuar, sempre com um botão.
-9. **Menu.** Cinco destinos: Estudar, Progresso, Simulado, Nota e Conta. No celular fica embaixo, ao alcance do polegar; no computador, no cabeçalho, como no site da Ginga. Esta é a única mudança em relação ao pedido de 09/11 (menu recolhido por botão no celular).
+9. **Lembrete e atalho.** Lembrete diário por evento de calendário gerado no aparelho (o PU não envia notificações) e atalho de tela inicial pelo manifesto.
+10. **Menu.** Cinco destinos: Estudar, Progresso, Simulado, Nota e Conta. No celular fica embaixo, ao alcance do polegar; no computador, no cabeçalho, como no site da Ginga. Esta é a única mudança em relação ao pedido de 09/11 (menu recolhido por botão no celular).
 
 ## Servidor e rede
 
 - `app/acompanhamento.py`: `ordem_intercalada`, `estudo` (dia, semana, revisão), `indice` (matérias, assuntos, questões curtas e conjuntos, sem enunciado nem gabarito) e a coluna `chute` em `respostas`, criada sem apagar histórico.
 - `app/servidor.py`: o painel traz `estudo`, `indice` e `inicial`; a resposta aceita `chute` e `proxima` e devolve `estudo` e `proximaQuestao`. Nenhuma rota nova: o intermediário publicado não precisou mudar.
-- `conector/conector.py`: consulta a fila a cada 0,4 s durante 20 s depois de um pedido e a cada 2 s parado (antes, 1 s sempre), e atende até quatro pedidos ao mesmo tempo. Parado, gasta metade dos pedidos de antes no intermediário.
-- Navegador: a consulta do resultado começa em 0,3 s; a questão seguinte e suas figuras são adiantadas durante a leitura; no limite de pedidos por minuto (429), as figuras esperam e tentam de novo.
+- `conector/conector.py`: faz pausa de 0,25 s entre consultas durante 20 s depois de um pedido e de 2 s parado (antes, 1 s sempre), e atende até seis pedidos ao mesmo tempo. Parado, gasta metade dos pedidos de antes no intermediário.
+- Navegador: a primeira consulta do resultado espera 0,9 s e as seguintes 0,25 s; as figuras vêm em lotes de cinco partes; a questão seguinte e suas figuras são adiantadas durante a leitura; no limite de pedidos por minuto (429), as figuras esperam e tentam de novo.
 - Entrada pública: política de conteúdo por `meta` (só o próprio site e o intermediário), manifesto e ícones para "Adicionar à tela inicial".
 - `gerenciador/iniciar.py`: o gerenciador dos ambientes individuais virou unidade permanente do usuário (`pu-gerenciador.service`). A unidade transitória sumiu quando o computador reiniciou em 10/11/2026 e, até 12/11, todo painel autenticado respondia "ambiente indisponível". `scripts/verificar-saude.py` passou a conferir o gerenciador.
 - O gabarito continua só no servidor. Exceção declarada na página de dados: a questão pública de demonstração da entrada.
 
 ## Limites conhecidos
+
+- Cada viagem pela fila pública leva cerca de 3 s (medido em 12/11/2026: de 2,7 a 3,9 s), quase tudo no banco do intermediário. A abertura e a próxima questão não esperam; cada "Conferir" espera. Sai com hospedagem direta ou com o gabarito conferido no navegador, que é decisão de Dominique.
 
 - As 356 questões ainda não têm solução comentada (afazer "Revisar as soluções do PU"). É o que mais limita o aprendizado.
 - O PC precisa estar ligado e não há recuperação de senha.
@@ -62,3 +65,4 @@ Nada aqui foi medido com estudantes reais do PU. São hipóteses de produto.
 
 - 12/11/2026 19:48 · Dominique-Oliveira-Claude🤖🧡 · Documento criado com o desenho, a pesquisa e a verificação. **Por quê:** pedido de Dominique Oliveira🐧❤️ de refazer o PU para aprender mais, com menos atrito e menos tédio.
 - 12/11/2026 20:07 · Dominique-Oliveira-Claude🤖🧡 · Acrescentadas as correções da revisão independente, o gerenciador permanente e a entrada pública com política de conteúdo e atalho de tela inicial. **Por quê:** registrar o que mudou entre a primeira versão e a publicada.
+- 12/11/2026 20:37 · Dominique-Oliveira-Claude🤖🧡 · Acertados os números do conector e do navegador, acrescentados o lembrete diário e o limite de 3 s por viagem na fila pública. **Por quê:** deixar o documento igual ao que foi publicado.
