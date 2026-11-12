@@ -16,7 +16,7 @@ from pathlib import Path
 from questoes import QUESTOES, CATALOGO, ARQUIVO_CATALOGO
 import base64
 from ambientes import AmbienteIndisponivel, ATIVO as INDIVIDUAIS, solicitar as ambiente, painel_individual
-from acompanhamento import preparar, ciclo, avancar, perfil
+from acompanhamento import preparar, ciclo, avancar, perfil, estudo, indice
 from conjuntos import membros as membros_conjunto, responder as responder_conjunto
 
 DADOS = Path(os.environ.get('DADOS', '/dados'))
@@ -33,6 +33,34 @@ VAGAS_SENHA = threading.BoundedSemaphore(2)
 if PRODUCAO and (not SEGURO or PERFIL_TESTE or not ORIGEM.startswith('https://')):
     raise RuntimeError('Produção exige HTTPS, cookie seguro e perfil de teste desligado.')
 PUBLICO = Path(__file__).parent / 'public'
+INDICE = indice(QUESTOES)
+MAPA = {q['id']: q for q in QUESTOES}
+
+def publica(questao):
+    """Questão sem gabarito, explicação ou estatística; conjuntos levam as perguntas irmãs."""
+    limpa = lambda q: {k: v for k, v in q.items() if k not in ['correta', 'explicacao', 'estatisticaOriginal']}
+    item = limpa(questao)
+    if questao.get('grupo'):
+        item['grupoQuestoes'] = [{k: v for k, v in limpa(q).items() if k != 'textoComum'} for q in membros_conjunto(questao, QUESTOES)]
+    return item
+
+def sugerida(densidade, ritmo):
+    """Primeira questão do dia: curta e sem figura, para começar sem esforço. Depois, revisão vencida ou a fila."""
+    pendentes = densidade['pendentes']
+    if ritmo['hoje']['respostas'] == 0:
+        curtas = set(INDICE['curtas'])
+        for i in pendentes:
+            if i in curtas:
+                return i
+    vencidas = ritmo['revisao']['vencidas']
+    return vencidas[0] if vencidas else (pendentes[0] if pendentes else None)
+
+def anexar_proxima(resultado, dados):
+    """Entrega a próxima questão na mesma resposta, para poupar uma viagem. Nunca inclui gabarito."""
+    proxima = dados.get('proxima')
+    if type(proxima) is int and proxima in MAPA:
+        resultado = dict(resultado, proximaQuestao=publica(MAPA[proxima]))
+    return resultado
 
 @contextmanager
 def banco():
@@ -141,7 +169,11 @@ class API(BaseHTTPRequestHandler):
     def painel(self, con, conta):
         totais = con.execute('SELECT COUNT(*) total,COALESCE(SUM(acerto),0) acertos FROM respostas WHERE conta=?', (conta['id'],)).fetchone()
         # Somente enunciados; gabarito e explicação continuam exclusivos da correção.
-        painel = {'densidade': ciclo(con, conta['id'], QUESTOES), 'perfil': perfil(con, conta['id'], QUESTOES), 'conta': conta, 'progresso': dict(totais), 'questoes': [
+        densidade = ciclo(con, conta['id'], QUESTOES)
+        ritmo = estudo(con, conta['id'], QUESTOES)
+        primeira = sugerida(densidade, ritmo)
+        painel = {'densidade': densidade, 'estudo': ritmo, 'indice': INDICE, 'inicial': publica(MAPA[primeira]) if primeira in MAPA else None,
+            'perfil': perfil(con, conta['id'], QUESTOES), 'conta': conta, 'progresso': dict(totais), 'questoes': [
             {k: q[k] for k in (['id','area','titulo'] if q.get('oficial') else ['id', 'area', 'titulo', 'enunciado', 'alternativas'])} for q in QUESTOES],
             'catalogo': {'origem':'cofre','total':len(QUESTOES),'anuladas':CATALOGO['anuladas'],'revisar':CATALOGO['revisar'],'versao':CATALOGO['versao']} if CATALOGO is not None else {'origem':'vazio','total':0}}
 
@@ -307,11 +339,7 @@ class API(BaseHTTPRequestHandler):
                 if not questao:
                     raise Erro(404, 'Questão não encontrada.')
                 if metodo == 'GET':
-                    def publica(q): return {k:v for k,v in q.items() if k not in ['correta','explicacao','estatisticaOriginal']}
-                    item=publica(questao)
-                    if questao.get('grupo'):
-                        item['grupoQuestoes']=[{k:v for k,v in publica(q).items() if k!='textoComum'} for q in membros_conjunto(questao,QUESTOES)]
-                    return self.enviar(200,item)
+                    return self.enviar(200,publica(questao))
                 if dados.get('acao') == 'imagem':
                     indice, parte = dados.get('indice'), dados.get('parte')
                     imagens = questao.get('imagens', [])
@@ -332,7 +360,7 @@ class API(BaseHTTPRequestHandler):
                     self.limitar(con,'respostas:'+str(conta['id']),200)
                     try: resultado=responder_conjunto(con,conta['id'],questao,QUESTOES,dados)
                     except ValueError as e: raise Erro(400,str(e))
-                    return self.enviar(200,resultado)
+                    return self.enviar(200,anexar_proxima(resultado,dados))
                 alternativa = dados.get('alternativa')
                 if type(alternativa) is not int or not 0 <= alternativa < len(questao['alternativas']):
                     raise Erro(400, 'Selecione uma alternativa válida.')
@@ -346,9 +374,10 @@ class API(BaseHTTPRequestHandler):
                     if anterior:
                         if anterior['questao'] != questao['id'] or anterior['alternativa'] != alternativa:
                             raise Erro(409, 'Este envio já foi usado para outra resposta.')
-                        return self.enviar(200,json.loads(anterior['resultado']))
+                        return self.enviar(200,anexar_proxima(json.loads(anterior['resultado']),dados))
                 acerto = alternativa == questao['correta']
-                con.execute('INSERT INTO respostas(conta,questao,alternativa,acerto,criada) VALUES(?,?,?,?,?)', (conta['id'], questao['id'], alternativa, acerto, time.time()))
+                # "Chutei" vem do aluno e só afeta a revisão dele; o acerto continua decidido aqui.
+                con.execute('INSERT INTO respostas(conta,questao,alternativa,acerto,criada,chute) VALUES(?,?,?,?,?,?)', (conta['id'], questao['id'], alternativa, acerto, time.time(), int(dados.get('chute') is True)))
                 concluida=avancar(con,conta['id'],questao['id'],QUESTOES)
                 resultado={'acerto':acerto,'correta':questao['correta'],'explicacao':questao['explicacao'],'densidadeConcluida':concluida,'estatisticaOriginal':None}
                 if chave:
@@ -356,9 +385,10 @@ class API(BaseHTTPRequestHandler):
                 resultado['acompanhamento']={'densidade':ciclo(con,conta['id'],QUESTOES),'perfil':perfil(con,conta['id'],QUESTOES)}
                 totais=con.execute('SELECT COUNT(*) total,COALESCE(SUM(acerto),0) acertos FROM respostas WHERE conta=?',(conta['id'],)).fetchone()
                 resultado['progresso']=dict(totais)
+                resultado['estudo']=estudo(con,conta['id'],QUESTOES)
                 if chave: con.execute('UPDATE envios SET resultado=? WHERE conta=? AND chave=?',(json.dumps(resultado),conta['id'],chave))
                 con.commit()
-                return self.enviar(200,resultado)
+                return self.enviar(200,anexar_proxima(resultado,dados))
             raise Erro(404, 'Página não encontrada.')
 
 if __name__ == '__main__':

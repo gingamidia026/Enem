@@ -1,4 +1,5 @@
-"""Ciclos e perfil calculados exclusivamente no servidor. Dominique-Oliveira-ChatGPT🤖💚."""
+"""Ciclos, perfil, revisão espaçada e ritmo de estudo calculados exclusivamente no servidor.
+Dominique-Oliveira-ChatGPT🤖💚; ordem intercalada, revisão e ritmo por Dominique-Oliveira-Claude🤖🧡 em 12/11/2026."""
 import json
 import time
 import hashlib
@@ -12,6 +13,9 @@ def preparar(con):
     CREATE TABLE IF NOT EXISTS medias(semana TEXT PRIMARY KEY, dados TEXT NOT NULL);
     CREATE INDEX IF NOT EXISTS respostas_conta ON respostas(conta);
     ''')
+    # "Chutei": acerto sem certeza continua na revisão. Coluna criada sem apagar o histórico.
+    if 'chute' not in [r[1] for r in con.execute('PRAGMA table_info(respostas)')]:
+        con.execute('ALTER TABLE respostas ADD COLUMN chute INTEGER NOT NULL DEFAULT 0')
 
 def materia(q):
     return q.get('materia') or q['area']
@@ -19,44 +23,110 @@ def materia(q):
 def assunto(q):
     return q.get('topico') or q.get('assunto') or 'Geral'
 
+FUSO = timezone(timedelta(hours=-3))  # Horário de Brasília, sem horário de verão desde 2019.
+INTERVALOS = [1, 3, 7]  # Dias até a próxima revisão, conforme os acertos seguros seguidos.
+LIMITE_CURTA = 900  # Caracteres de enunciado e alternativas de uma questão de aquecimento.
+
+def rodizio(filas, primeiro=None):
+    """Junta várias filas alternando entre elas na proporção do tamanho de cada uma, sem blocos."""
+    nomes = sorted(filas, key=lambda n: (n != primeiro, n))
+    total = sum(len(f) for f in filas.values())
+    saldo = {n: 0 for n in nomes}
+    usados = {n: 0 for n in nomes}
+    if primeiro in saldo:
+        saldo[primeiro] = total  # garante a primeira posição; a proporção se acerta nas rodadas seguintes
+    ordem = []
+    while len(ordem) < total:
+        ativos = [n for n in nomes if usados[n] < len(filas[n])]
+        for n in ativos:
+            saldo[n] += len(filas[n])
+        escolhida = max(ativos, key=lambda n: (saldo[n], -nomes.index(n)))
+        saldo[escolhida] -= total
+        ordem.append(filas[escolhida][usados[escolhida]])
+        usados[escolhida] += 1
+    return ordem
+
+def ordem_intercalada(questoes):
+    """Rodízio proporcional em dois níveis: entre as matérias, começando em Português, e entre os assuntos de cada matéria."""
+    materias = defaultdict(lambda: defaultdict(list))
+    for q in sorted(questoes, key=lambda q: q['id']):
+        materias[materia(q)][assunto(q)].append(q['id'])
+    return rodizio({m: rodizio(dict(assuntos)) for m, assuntos in materias.items()}, 'Português')
+
 def ciclo(con, conta, questoes):
-    ordem = sorted(questoes, key=lambda q:(materia(q) != 'Português', materia(q), assunto(q), q['id']))
-    ids = [q['id'] for q in ordem]
-    con.execute('INSERT OR IGNORE INTO ciclos(conta,ids) VALUES(?,?)',(conta,json.dumps(ids)))
+    ordem = ordem_intercalada(questoes)
+    con.execute('INSERT OR IGNORE INTO ciclos(conta,ids) VALUES(?,?)',(conta,json.dumps(ordem)))
     r=con.execute('SELECT * FROM ciclos WHERE conta=?',(conta,)).fetchone()
     previstos=json.loads(r['ids']); feitos=set(json.loads(r['feitos'])); mapa={q['id']:q for q in questoes}
+    posicao={i:n for n,i in enumerate(ordem)}
     pendentes=[i for i in previstos if i not in feitos]
+    # A ordem de estudo é a intercalada atual; o registro guarda quais questões pertencem à densidade.
+    disponiveis=sorted((i for i in pendentes if i in mapa),key=lambda i:posicao[i])
+    removidas=len(pendentes)-len(disponiveis)
     grupos=defaultdict(lambda: {'total':0,'feitas':0})
     for i in previstos:
         nome=materia(mapa[i]) if i in mapa else 'Questão removida do catálogo'
         grupos[nome]['total']+=1; grupos[nome]['feitas']+=int(i in feitos)
-    return {'concluidas':r['concluidos'],'feitas':len(feitos),'total':len(previstos),'proxima':pendentes[0] if pendentes and pendentes[0] in mapa else None,'bloqueada':bool(pendentes and pendentes[0] not in mapa),'materias':[dict(materia=m,**v) for m,v in grupos.items()], 'base':'Distribuição do catálogo de provas 2024 e 2025; classificações em revisão. Não é uma média histórica validada do Enem.'}
+    return {'concluidas':r['concluidos'],'feitas':len(feitos),'total':len(previstos),'proxima':disponiveis[0] if disponiveis else None,
+            'bloqueada':bool(removidas and not disponiveis),'removidas':removidas,'pendentes':disponiveis,
+            'materias':[dict(materia=m,**v) for m,v in grupos.items()],
+            'base':'Distribuição do catálogo de provas 2024 e 2025; classificações em revisão. Não é uma média histórica validada do Enem.'}
 
 def avancar(con, conta, questao, questoes):
-    estado=ciclo(con,conta,questoes)
-    if estado['proxima'] != questao: return False
-    r=con.execute('SELECT * FROM ciclos WHERE conta=?',(conta,)).fetchone()
-    feitos=json.loads(r['feitos']); feitos.append(questao)
-    terminou=len(feitos)==len(json.loads(r['ids'])) and bool(feitos)
-    con.execute('UPDATE ciclos SET feitos=?,concluidos=concluidos+? WHERE conta=?',(json.dumps([] if terminou else feitos),int(terminou),conta))
-    if terminou:
-        ids=[q['id'] for q in sorted(questoes,key=lambda q:(materia(q)!='Português',materia(q),assunto(q),q['id']))]
-        con.execute('UPDATE ciclos SET ids=? WHERE conta=?',(json.dumps(ids),conta))
-    return terminou
+    return avancar_conjunto(con, conta, [questao], questoes)
 
 def avancar_conjunto(con, conta, ids, questoes):
-    estado=ciclo(con,conta,questoes)
-    if estado['proxima'] not in ids: return False
+    """Conta qualquer questão pendente da densidade, em qualquer ordem. Repetição não conta duas vezes."""
+    ciclo(con,conta,questoes)
     r=con.execute('SELECT * FROM ciclos WHERE conta=?',(conta,)).fetchone()
     previstos=json.loads(r['ids']); feitos=set(json.loads(r['feitos']))
-    feitos.update(i for i in ids if i in previstos)
+    novos=[i for i in ids if i in previstos and i not in feitos]
+    if not novos: return False
+    feitos.update(novos)
     terminou=bool(previstos) and len(feitos)==len(previstos)
     con.execute('UPDATE ciclos SET feitos=?,concluidos=concluidos+? WHERE conta=?',
                 (json.dumps([] if terminou else sorted(feitos)),int(terminou),conta))
     if terminou:
-        ids=[q['id'] for q in sorted(questoes,key=lambda q:(materia(q)!='Português',materia(q),assunto(q),q['id']))]
-        con.execute('UPDATE ciclos SET ids=? WHERE conta=?',(json.dumps(ids),conta))
+        con.execute('UPDATE ciclos SET ids=? WHERE conta=?',(json.dumps(ordem_intercalada(questoes)),conta))
     return terminou
+
+def indice(questoes):
+    """Mapa fixo do catálogo para a interface montar foco por matéria e assunto. Sem enunciado nem gabarito."""
+    materias={}
+    for q in sorted(questoes,key=lambda q:(materia(q)!='Português',materia(q),assunto(q),q['id'])):
+        m=materias.setdefault(materia(q),{'nome':materia(q),'area':q['area'],'topicos':{}})
+        m['topicos'].setdefault(assunto(q),[]).append(q['id'])
+    curtas=[q['id'] for q in questoes if not q.get('imagens') and not q.get('grupo') and not q.get('textoParcial')
+            and len(q.get('enunciado',''))+sum(len(a) for a in q.get('alternativas',[]))<=LIMITE_CURTA]
+    return {'materias':[{'nome':m['nome'],'area':m['area'],'topicos':[{'nome':t,'ids':ids} for t,ids in m['topicos'].items()]} for m in materias.values()],
+            'curtas':curtas,'conjuntos':[q['id'] for q in questoes if q.get('grupo')]}
+
+def estudo(con, conta, questoes, agora=None):
+    """Dia, semana e revisão espaçada, calculados só com o histórico de respostas da própria conta."""
+    hoje=(agora or datetime.now(FUSO)).astimezone(FUSO).date()
+    mapa={q['id'] for q in questoes}
+    historico=defaultdict(list); dias=defaultdict(lambda:[0,0])
+    for r in con.execute('SELECT questao,acerto,chute,criada FROM respostas WHERE conta=? ORDER BY criada,rowid',(conta,)):
+        dia=datetime.fromtimestamp(r['criada'],FUSO).date()
+        dias[dia][0]+=1; dias[dia][1]+=int(r['acerto'])
+        historico[r['questao']].append((bool(r['acerto']) and not r['chute'],dia))
+    vencidas=[]; caderno=0
+    for questao,tentativas in historico.items():
+        if questao not in mapa: continue
+        # nivel None: nunca errou nem chutou. Depois do primeiro tropeço, só sobe de nível o acerto seguro
+        # feito no dia do vencimento ou depois; acerto adiantado (acabou de ver o gabarito) não conta nem atrasa.
+        nivel=None; marco=None
+        for seguro,dia in tentativas:
+            if not seguro: nivel=0; marco=dia
+            elif nivel is not None and nivel<len(INTERVALOS) and (dia-marco).days>=INTERVALOS[nivel]: nivel+=1; marco=dia
+        if nivel is None or nivel>=len(INTERVALOS): continue
+        caderno+=1
+        if (hoje-marco).days>=INTERVALOS[nivel]: vencidas.append((marco.isoformat(),questao))
+    segunda=hoje-timedelta(days=hoje.weekday())
+    semana=[dias[segunda+timedelta(days=n)][0] if segunda+timedelta(days=n) in dias else 0 for n in range(7)]
+    feitas_hoje=dias[hoje] if hoje in dias else [0,0]
+    return {'data':hoje.isoformat(),'hoje':{'respostas':feitas_hoje[0],'acertos':feitas_hoje[1]},'semana':semana,'diaDaSemana':hoje.weekday(),
+            'revisao':{'vencidas':[q for _,q in sorted(vencidas)],'caderno':caderno,'intervalos':INTERVALOS}}
 
 def perfil(con,conta,questoes,agora=None):
     agora=agora or datetime.now(timezone.utc)

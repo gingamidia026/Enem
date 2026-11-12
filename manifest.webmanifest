@@ -1,0 +1,25 @@
+{
+ "name": "Pé na Universidade (PU)",
+ "short_name": "PU",
+ "description": "Questões oficiais do Enem uma por vez, com revisão dos erros e meta diária pequena.",
+ "lang": "pt-BR",
+ "start_url": "./",
+ "scope": "./",
+ "display": "standalone",
+ "background_color": "#FFFFFF",
+ "theme_color": "#FBFBFA",
+ "icons": [
+  {
+   "src": "icones/pu-192.png",
+   "sizes": "192x192",
+   "type": "image/png",
+   "purpose": "any maskable"
+  },
+  {
+   "src": "icones/pu-512.png",
+   "sizes": "512x512",
+   "type": "image/png",
+   "purpose": "any maskable"
+  }
+ ]
+}

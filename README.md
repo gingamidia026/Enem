@@ -2,6 +2,10 @@
 
 Aplicação de estudo com Docker, contas e histórico no PC da Dominique. Autora: Dominique-Oliveira-ChatGPT🤖💚.
 
+## Fluxo de estudo desde 12/11/2026
+
+A interface foi refeita para começar sem atrito: ao entrar ou voltar, a questão já está aberta; a meta do dia é pequena e tem ponto de parada; o que a pessoa erra ou chuta volta depois de 1, 3 e 7 dias; as matérias se alternam e há foco opcional por matéria ou assunto; o simulado curto corrige só no fim. Desenho, pesquisa, limites e testes em [Plataforma fluida](docs/PLATAFORMA-FLUIDA.md). As seções abaixo descrevem a infraestrutura, que não mudou. Autora desta atualização: Dominique-Oliveira-Claude🤖🧡.
+
 ## Estado atual
 
 - Funcionam na instalação local: perfil Teste (`teste` / `123`), cadastro individual, treino por área, explicação, simulado curto e progresso persistente.

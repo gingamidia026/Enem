@@ -1,0 +1,64 @@
+# PU: plataforma fluida de estudo
+
+Autora: Dominique-Oliveira-Claude🤖🧡. Pedido de Dominique Oliveira🐧❤️ em 12/11/2026: ver todas as funcionalidades, formular do zero como a plataforma deve ser para maximizar o aprendizado e a fluidez, reduzir o tédio e deixar a barreira de início do dia extremamente baixa, construir, testar e aplicar.
+
+## Objetivo
+
+Para quem: estudante de Enem e vestibular, quase sempre no celular, com pouco tempo e pouca vontade em boa parte dos dias. Mensagem: uma questão por vez, começa sem pensar. Ação: abrir e responder a primeira questão.
+
+## Funcionalidades que existiam e foram mantidas
+
+Conta (cadastro, entrada, sessão de 30 dias, saída), até cinco dispositivos com revogação, banco de 356 questões oficiais de 2024 e 2025 vindo do cofre, figuras entregues em partes, conjuntos com texto comum respondidos juntos, densidade (volta completa pelo banco), perfil por matéria e assunto com média semanal dos usuários, simulado curto, simulador de nota, página de dados e segurança, ambientes individuais por conta e acesso público pelo intermediário. Nada disso saiu.
+
+## O que a pesquisa sustenta, e com que força
+
+- **Responder questões e espaçar a revisão.** São as duas técnicas com utilidade alta na revisão de Dunlosky e colegas (2013). É a base do desenho.
+- **Intercalar.** A meta-análise de Brunmair e Richter (2019) acha efeito moderado e muito variável: ajuda mais em matemática e em categorias parecidas entre si, e é incerto em textos. Por isso a mistura de matérias entra como variedade e espaçamento, com foco por matéria sempre disponível, e a interface não promete que misturar ensina mais.
+- **Ludificação.** As meta-análises acham efeito pequeno no aprendizado e inconsistente na motivação; sobre sequências de dias quase não há estudo. Ficou só o retorno de progresso (meta do dia e dias da semana), sem pontos, prêmio, ranking ou sequência que se perde.
+- **Procrastinação.** A literatura liga o adiamento à tarefa vaga e desagradável; a evidência de planos do tipo "se, então" é mista. O que se aplica com segurança é tirar decisões e passos do começo e deixar o primeiro passo concreto e pequeno.
+- **Segunda tentativa e autoexplicação.** Apoio mais fraco. Entraram por custo baixo e porque o banco ainda não tem solução comentada; são opcionais e não travam o fluxo.
+
+Nada aqui foi medido com estudantes reais do PU. São hipóteses de produto.
+
+## Como a plataforma ficou
+
+1. **Abrir já na questão.** Não há painel antes. A primeira questão do dia é curta e sem figura. Com a conta conectada, a tela é montada com o que ficou guardado no navegador e o servidor atualiza em seguida.
+2. **Meta pequena e ponto de parada.** Padrão de 5 questões (3, 5, 10 ou 20). Ao cumprir, aparece "Meta de hoje cumprida" com "Mais 5 questões" e "Encerrar por hoje". Os dias estudados na semana aparecem em sete marcas; não existe sequência a perder.
+3. **Revisão espaçada.** Questão errada ou marcada como "Chutei" volta depois de 1, 3 e 7 dias e sai do caderno quando a pessoa acerta com segurança nas três voltas. Acerto antes do prazo não conta: quem acabou de ver o gabarito não sobe de nível. Na fila, entra uma revisão a cada duas questões novas.
+4. **Ordem intercalada.** As matérias se alternam na proporção do catálogo, começando por Português, e dentro de cada matéria os assuntos também se alternam. A densidade passa a contar qualquer questão pendente, em qualquer ordem, o que permite foco por matéria ou assunto sem sair do ciclo.
+5. **Correção em dois tempos.** No erro, a pessoa pode tentar outra alternativa antes de ver a certa (não é registrado). Sem solução comentada, o texto pede uma frase de autoexplicação, oferece a busca da resolução daquela questão fora do PU, mostra o assunto e o conteúdo cobrado e avisa quando a questão volta.
+6. **Leitura.** As quebras de linha do PDF viram parágrafos; versos, referência e comando ficam separados. É apresentação: o catálogo não é alterado.
+7. **Simulado curto.** Dez questões das quatro áreas, cronômetro, correção só no fim, retomada depois de sair.
+8. **Progresso que aponta o próximo passo.** Revisão vencida, assunto mais fraco ou continuar, sempre com um botão.
+9. **Menu.** Cinco destinos: Estudar, Progresso, Simulado, Nota e Conta. No celular fica embaixo, ao alcance do polegar; no computador, no cabeçalho, como no site da Ginga. Esta é a única mudança em relação ao pedido de 09/11 (menu recolhido por botão no celular).
+
+## Servidor e rede
+
+- `app/acompanhamento.py`: `ordem_intercalada`, `estudo` (dia, semana, revisão), `indice` (matérias, assuntos, questões curtas e conjuntos, sem enunciado nem gabarito) e a coluna `chute` em `respostas`, criada sem apagar histórico.
+- `app/servidor.py`: o painel traz `estudo`, `indice` e `inicial`; a resposta aceita `chute` e `proxima` e devolve `estudo` e `proximaQuestao`. Nenhuma rota nova: o intermediário publicado não precisou mudar.
+- `conector/conector.py`: consulta a fila a cada 0,4 s durante 20 s depois de um pedido e a cada 2 s parado (antes, 1 s sempre), e atende até quatro pedidos ao mesmo tempo. Parado, gasta metade dos pedidos de antes no intermediário.
+- Navegador: a consulta do resultado começa em 0,3 s; a questão seguinte e suas figuras são adiantadas durante a leitura; no limite de pedidos por minuto (429), as figuras esperam e tentam de novo.
+- Entrada pública: política de conteúdo por `meta` (só o próprio site e o intermediário), manifesto e ícones para "Adicionar à tela inicial".
+- `gerenciador/iniciar.py`: o gerenciador dos ambientes individuais virou unidade permanente do usuário (`pu-gerenciador.service`). A unidade transitória sumiu quando o computador reiniciou em 10/11/2026 e, até 12/11, todo painel autenticado respondia "ambiente indisponível". `scripts/verificar-saude.py` passou a conferir o gerenciador.
+- O gabarito continua só no servidor. Exceção declarada na página de dados: a questão pública de demonstração da entrada.
+
+## Limites conhecidos
+
+- As 356 questões ainda não têm solução comentada (afazer "Revisar as soluções do PU"). É o que mais limita o aprendizado.
+- O PC precisa estar ligado e não há recuperação de senha.
+- Frações e fórmulas mal extraídas do PDF continuam como estão no cofre (plano de correção das questões).
+- A meta, o foco e o simulado em andamento ficam no aparelho; não passam de um dispositivo para outro.
+- Reencontrar a mesma questão na revisão pode treinar a memória da letra. Os intervalos crescentes reduzem isso, sem eliminar.
+
+## Verificação
+
+- `python3 tests/testar.py` (11), `tests/acompanhamento.py` (6), `tests/conjuntos.py` (8), `tests/sincronizacao.py` (6), `node tests/simulador.cjs`, `node tests/intermediario.mjs`.
+- `node tests/fluida-navegador.mjs [pasta]`: 33 itens no Chrome sem janela, com banco e catálogo temporários, inclusive a entrada pública com o intermediário simulado. Não usa `npm install`.
+- `python3 tests/ambientes.py`: Docker real com ambientes individuais e banco sintético. Falhava desde que o catálogo passou a vir só de arquivo; recebeu catálogo de teste e voltou a passar.
+- Revisão independente em 12/11/2026 (agente Opus, sem editar): 25 pontos. Corrigidos: simulado que travava ao recarregar com envio pendente, contagem do dia fora do fuso de Brasília, painel antigo sobrescrevendo resposta, revisão aceitando acerto adiantado, alternativa travada depois do primeiro envio, anúncio para leitor de tela, cor da alternativa certa, contraste das bordas, atalhos de letra desligáveis, saída que sempre limpa o aparelho, preferências separadas por conta e textos. Não corrigidos: falta de solução comentada (conteúdo) e os 27 KB do campo `questoes` no painel (mantido para a interface antiga que ainda estiver em cache).
+- Os testes `.cjs` de navegador anteriores descrevem a interface antiga e dependem do `playwright-core`; ficaram no repositório até Dominique decidir se saem.
+
+## Atualizações
+
+- 12/11/2026 19:48 · Dominique-Oliveira-Claude🤖🧡 · Documento criado com o desenho, a pesquisa e a verificação. **Por quê:** pedido de Dominique Oliveira🐧❤️ de refazer o PU para aprender mais, com menos atrito e menos tédio.
+- 12/11/2026 20:07 · Dominique-Oliveira-Claude🤖🧡 · Acrescentadas as correções da revisão independente, o gerenciador permanente e a entrada pública com política de conteúdo e atalho de tela inicial. **Por quê:** registrar o que mudou entre a primeira versão e a publicada.

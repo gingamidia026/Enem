@@ -6,11 +6,14 @@ import re
 import time
 import urllib.error
 import urllib.request
+from concurrent.futures import ThreadPoolExecutor
 from http.cookies import SimpleCookie
 
 REMOTO = os.environ.get('ENEM_INTERMEDIARIO', '').rstrip('/')
 CHAVE = ''
 ORIGEM = os.environ.get('ORIGEM', 'http://localhost:8088')
+# Parado, consulta a cada 2 s (metade dos pedidos de antes); com alguém estudando, a cada 0,4 s por 20 s.
+PAUSA_ATIVA, PAUSA_PARADA, JANELA_ATIVA = 0.4, 2.0, 20.0
 
 def permitido(metodo, caminho):
     return ((metodo == 'GET' and caminho in ['/api/configuracao', '/api/painel', '/api/dispositivos'])
@@ -50,26 +53,40 @@ def executar(pedido):
                 dados['sessao'] = cookie['sessao'].value
         return {'status': resposta.status, 'dados': dados}
 
+def atender(pedido):
+    try:
+        resultado = executar(pedido)
+    except Exception:
+        resultado = {'status': 502, 'dados': {'erro': 'A aplicação não respondeu. Tente novamente.'}}
+    try:
+        remoto('/conector/responder', {'id': pedido['id'], **resultado})
+    except Exception:
+        # O navegador recebe indisponibilidade pelo prazo do pedido; nada sensível vai ao registro.
+        print('Resposta não entregue ao intermediário.', flush=True)
+
 def principal():
     global CHAVE
     if not re.fullmatch(r'https://[a-zA-Z0-9.-]+', REMOTO):
         raise ValueError('Intermediário precisa de uma origem HTTPS, sem caminhos.')
     CHAVE = Path('/run/secrets/chave').read_text().strip()
     print('Conector ENEM iniciado: somente conexões de saída; sem dados de pessoas nos registros.', flush=True)
-    while True:
-        try:
-            fila = remoto('/conector/retirar', {})
-            for pedido in fila.get('pedidos', []):
-                try:
-                    resultado = executar(pedido)
-                except Exception:
-                    resultado = {'status': 502, 'dados': {'erro': 'A aplicação não respondeu. Tente novamente.'}}
-                remoto('/conector/responder', {'id': pedido['id'], **resultado})
-            time.sleep(1)
-        except Exception:
-            # Não imprimir URL completa, chave, sessão, pedidos ou respostas.
-            print('Conexão temporariamente indisponível; nova tentativa em cinco segundos.', flush=True)
-            time.sleep(5)
+    ultimo_pedido = 0.0
+    # Quatro pedidos por vez: as partes de uma figura não esperam uma pela outra.
+    with ThreadPoolExecutor(max_workers=4) as atendentes:
+        while True:
+            try:
+                fila = remoto('/conector/retirar', {})
+                pedidos = fila.get('pedidos', [])
+                if pedidos:
+                    ultimo_pedido = time.monotonic()
+                    for pedido in pedidos:
+                        atendentes.submit(atender, pedido)
+                # Com alguém estudando, consulta a fila mais vezes; parado, poupa a cota do intermediário.
+                time.sleep(PAUSA_ATIVA if time.monotonic() - ultimo_pedido < JANELA_ATIVA else PAUSA_PARADA)
+            except Exception:
+                # Não imprimir URL completa, chave, sessão, pedidos ou respostas.
+                print('Conexão temporariamente indisponível; nova tentativa em cinco segundos.', flush=True)
+                time.sleep(5)
 
 if __name__ == '__main__':
     principal()

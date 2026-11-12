@@ -3,7 +3,7 @@ import hashlib
 import json
 import re
 import time
-from acompanhamento import avancar_conjunto, ciclo, perfil
+from acompanhamento import avancar_conjunto, ciclo, perfil, estudo
 
 def membros(questao, questoes):
     if not questao.get('grupo'): return [questao]
@@ -35,13 +35,14 @@ def responder(con, conta, questao, questoes, dados):
     resultados=[]
     for q in grupo:
         acerto=mapa[q['id']]==q['correta']
-        con.execute('INSERT INTO respostas(conta,questao,alternativa,acerto,criada) VALUES(?,?,?,?,?)',
-                    (conta,q['id'],mapa[q['id']],acerto,time.time()))
+        con.execute('INSERT INTO respostas(conta,questao,alternativa,acerto,criada,chute) VALUES(?,?,?,?,?,?)',
+                    (conta,q['id'],mapa[q['id']],acerto,time.time(),int(dados.get('chute') is True)))
         resultados.append({'id':q['id'],'acerto':acerto,'correta':q['correta'],'explicacao':q['explicacao']})
     terminou=avancar_conjunto(con,conta,list(mapa),questoes)
     resultado={'resultados':resultados,'densidadeConcluida':terminou,
                'acompanhamento':{'densidade':ciclo(con,conta,questoes),'perfil':perfil(con,conta,questoes)},
-               'progresso':dict(con.execute('SELECT COUNT(*) total,COALESCE(SUM(acerto),0) acertos FROM respostas WHERE conta=?',(conta,)).fetchone())}
+               'progresso':dict(con.execute('SELECT COUNT(*) total,COALESCE(SUM(acerto),0) acertos FROM respostas WHERE conta=?',(conta,)).fetchone()),
+               'estudo':estudo(con,conta,questoes)}
     con.execute('INSERT INTO envios_conjuntos VALUES(?,?,?,?)',(conta,envio,assinatura,json.dumps(resultado)))
     con.commit()
     return resultado

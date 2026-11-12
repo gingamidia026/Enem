@@ -99,6 +99,36 @@ class Testes(unittest.TestCase):
         self.assertEqual(self.pedido(a,'/api/painel')[0],401)
         self.assertEqual(self.pedido(a,'/api/entrar',{'email':'EstudanteA@example.com','senha':'Senha longa de teste 123!'})[0],200)
         self.assertEqual(self.pedido(a,'/api/painel')[1]['progresso']['total'],1)
+    def test_estudo_fluido_chute_proxima_e_ritmo(self):
+        # Dominique-Oliveira-Claude🤖🧡: fila sem ordem fixa, "Chutei", próxima questão na mesma resposta e ritmo do dia.
+        a,b=self.cliente(),self.cliente()
+        self.cadastrar(a,'FluidaA');self.cadastrar(b,'FluidaB')
+        painel=self.pedido(a,'/api/painel')[1]
+        self.assertEqual(sorted(painel['densidade']['pendentes']),[1,2,3,4])
+        self.assertEqual(painel['estudo']['hoje'],{'respostas':0,'acertos':0});self.assertEqual(painel['estudo']['revisao']['vencidas'],[])
+        self.assertIn(painel['inicial']['id'],[1,2,3,4])
+        texto=json.dumps(painel)
+        for proibido in ['correta','explicacao']: self.assertNotIn(proibido,texto)
+        self.assertEqual(sorted(i for m in painel['indice']['materias'] for t in m['topicos'] for i in t['ids']),[1,2,3,4])
+        # Fora da ordem sugerida, com chute certo: conta na densidade, entra no caderno e traz a próxima sem gabarito.
+        envio='fluida-envio-000000000001'
+        status,r,_=self.pedido(a,'/api/questoes/3',{'alternativa':1,'envio':envio,'chute':True,'proxima':4})
+        self.assertEqual(status,200);self.assertTrue(r['acerto'])
+        self.assertEqual(r['proximaQuestao']['id'],4);self.assertNotIn('correta',r['proximaQuestao']);self.assertNotIn('explicacao',r['proximaQuestao'])
+        self.assertEqual(r['estudo']['hoje'],{'respostas':1,'acertos':1});self.assertEqual(r['estudo']['revisao']['caderno'],1)
+        self.assertNotIn(3,r['acompanhamento']['densidade']['pendentes']);self.assertEqual(r['acompanhamento']['densidade']['feitas'],1)
+        self.assertEqual(sum(r['estudo']['semana']),1)
+        # Reenvio com a mesma chave não conta de novo; "chute" e "proxima" inválidos não derrubam nem vazam.
+        status,r2,_=self.pedido(a,'/api/questoes/3',{'alternativa':1,'envio':envio,'chute':True,'proxima':4})
+        self.assertEqual(status,200);self.assertEqual(r2['progresso'],{'total':1,'acertos':1});self.assertEqual(r2['proximaQuestao']['id'],4)
+        status,r3,_=self.pedido(a,'/api/questoes/1',{'alternativa':2,'chute':'sim','proxima':'../../etc/passwd'})
+        self.assertEqual(status,200);self.assertNotIn('proximaQuestao',r3);self.assertEqual(r3['estudo']['revisao']['caderno'],1)
+        self.assertNotIn('proximaQuestao',self.pedido(a,'/api/questoes/2',{'alternativa':0,'proxima':999})[1])
+        # A outra conta não vê nada disso.
+        outro=self.pedido(b,'/api/painel')[1]
+        self.assertEqual(outro['estudo']['hoje'],{'respostas':0,'acertos':0});self.assertEqual(outro['estudo']['revisao']['caderno'],0);self.assertEqual(len(outro['densidade']['pendentes']),4)
+        self.assertEqual(self.pedido(self.cliente(),'/api/questoes/1',{'alternativa':0,'proxima':2})[0],401)
+
     def test_origem_caminhos_e_segredos(self):
         a=self.cliente()
         self.assertEqual(self.pedido(a,'/api/cadastro',{},origem=False)[0],403)

@@ -16,7 +16,10 @@ with tempfile.TemporaryDirectory() as pasta:
     gerenciador=subprocess.Popen(['python3',str(RAIZ/'gerenciador/servidor.py')],env=ambiente,stdout=subprocess.DEVNULL)
     with socket.socket() as s:s.bind(('127.0.0.1',0));porta=s.getsockname()[1]
     origem=f'http://127.0.0.1:{porta}'
-    servidor=subprocess.Popen(['python3',str(RAIZ/'app/servidor.py')],env={**os.environ,'DADOS':pasta+'/banco','ESCUTA':'127.0.0.1','PORTA':str(porta),'ORIGEM':origem,'PERFIL_TESTE':'0','AMBIENTES_INDIVIDUAIS':'1','PU_CONTROLE':sock},stdout=subprocess.DEVNULL)
+    # Dominique-Oliveira-Claude🤖🧡: o catálogo vem só de arquivo; sem ele a questão 1 não existe e o teste falhava.
+    import sys;sys.path.insert(0,str(RAIZ/'tests'));from questoes_sinteticas import QUESTOES
+    Path(pasta+'/catalogo.json').write_text(json.dumps({'formato':1,'questoes':QUESTOES,'anuladas':0,'revisar':0,'versao':'laboratorio'}))
+    servidor=subprocess.Popen(['python3',str(RAIZ/'app/servidor.py')],env={**os.environ,'CATALOGO':pasta+'/catalogo.json','DADOS':pasta+'/banco','ESCUTA':'127.0.0.1','PORTA':str(porta),'ORIGEM':origem,'PERFIL_TESTE':'0','AMBIENTES_INDIVIDUAIS':'1','PU_CONTROLE':sock},stdout=subprocess.DEVNULL)
     clientes=[urllib.request.build_opener(urllib.request.HTTPCookieProcessor(http.cookiejar.CookieJar())) for _ in range(3)]
     try:
         for _ in range(100):
@@ -38,7 +41,12 @@ with tempfile.TemporaryDirectory() as pasta:
         assert obter(clientes[0],'/site/')[0]==200
         assert obter(clientes[0],'/site/../../dados/painel.json')[0] in [400,404]
         assert obter(clientes[0],'/api/questoes/1',{'alternativa':0,'conta':2})[0]==400
-        assert obter(clientes[0],'/api/questoes/1',{'alternativa':0})[0]==200
+        resposta=obter(clientes[0],'/api/questoes/1',{'alternativa':0,'chute':True,'proxima':2})
+        assert resposta[0]==200 and resposta[1]['estudo']['hoje']['respostas']==1 and resposta[1]['proximaQuestao']['id']==2
+        # O painel novo atravessa o ambiente individual inteiro, sem gabarito, e o site entregue é o atual.
+        novo=obter(clientes[0],'/api/painel')[1]
+        assert novo['estudo']['revisao']['caderno']==1 and novo['indice']['materias'] and 'correta' not in json.dumps(novo)
+        assert b'filaDeEstudo' in obter(clientes[0],'/site/app.js')[1]
         assert obter(clientes[1],'/api/painel')[1]['progresso']['total']==0
         for i in ['1','2']:
             info=json.loads(docker('inspect',PREFIXO+'-'+i))[0]
