@@ -72,7 +72,10 @@ main { flex: 1; width: 100%; padding: 1rem max(1rem,env(safe-area-inset-right)) 
 #conteudo:has(.entrada) { max-width: 64rem; }
 #conteudo.entrou > * { animation: entrar 260ms var(--curva) both; }
 @keyframes entrar { from { opacity: 0; transform: translateY(6px); } }
-#aviso { max-width: 46rem; margin: 1rem auto 0; color: var(--vermelho); font-weight: 500; }
+#aviso { max-width: 46rem; margin: 1rem auto 0; color: var(--texto); font-weight: 500; }
+#aviso.falha { color: var(--vermelho); }
+/* Foco levado pelo código a um título ou ao conteúdo serve ao leitor de tela; não precisa de moldura. */
+:is(h1, h2, main)[tabindex="-1"]:focus { outline: none; }
 #aviso:empty { display: none; }
 footer { padding: 1.25rem 1rem calc(1.25rem + var(--altura-menu) + env(safe-area-inset-bottom)); border-top: 1px solid var(--linha); color: var(--secundario); font-size: .8125rem; text-align: center; }
 body.sem-sessao footer { padding-bottom: 1.25rem; }
@@ -215,6 +218,7 @@ progress.largo { height: 8px; margin-bottom: 1rem; }
 .lembrar { margin: 1.25rem 0 0; }
 .dispositivo { display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: .5rem 0; border-top: 1px solid var(--linha); }
 .dispositivo strong { font-weight: 600; }
+.dispositivo .texto-botao, .assunto .texto-botao, .linha-resultado .texto-botao { flex-shrink: 0; white-space: nowrap; overflow-wrap: normal; }
 
 /* Entrada */
 .entrada { display: grid; gap: 2rem; padding-top: .5rem; }

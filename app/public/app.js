@@ -95,7 +95,8 @@ async function api(caminho, dados) {
   if (caminho === '/api/sair') guardarSessao('');
   return resultado;
 }
-function erro(e) { aviso.textContent = mensagemErro(e); }
+function erro(e) { aviso.className = 'falha'; aviso.textContent = mensagemErro(e); }
+function informar(texto, falha = false) { aviso.className = falha ? 'falha' : ''; aviso.textContent = texto; }
 /* Limpa o aparelho. Na saída pedida pela pessoa, apaga também o simulado; quando é a sessão que venceu,
    o simulado em andamento fica guardado e volta se a mesma conta entrar de novo. */
 function encerrarLocal(saida = false) {
@@ -301,7 +302,7 @@ function aquecimento() {
 // ---------- Tela ----------
 function tela(html) {
   pararRelogio(); estado.aoTeclar = null; estado.atual = null; estado.vez++;
-  aviso.textContent = ''; conteudo.innerHTML = html;
+  informar(''); conteudo.innerHTML = html;
   conteudo.classList.remove('entrou'); void conteudo.offsetWidth; conteudo.classList.add('entrou');
 }
 function subir() { window.scrollTo(0, 0); }
@@ -804,15 +805,15 @@ ${publico && !matchMedia('(display-mode: standalone)').matches ? '<h2>PU a um to
 <h2>Atalhos do teclado</h2><p class="secundario">No computador, as teclas A a E marcam a alternativa e Enter confere.</p><div class="modos" role="group" aria-label="Atalhos do teclado"><button type="button" class="ficha" id="atalhos" aria-pressed="${prefs.atalhos !== false}">Letras A a E ${prefs.atalhos !== false ? 'ligadas' : 'desligadas'}</button></div>
 <h2>Dispositivos autorizados</h2><p class="secundario">Um novo navegador é registrado quando você entra com a senha. Você pode manter até cinco. Revogar encerra as sessões daquele dispositivo.</p><div id="dispositivos"><p class="espera" role="status">Carregando dispositivos…</p></div>
 <h2>Dados e saída</h2><div class="acoes"><a class="botao discreto" href="#privacidade">Dados e segurança</a><button type="button" class="discreto" id="sair">Sair da conta</button></div>`);
-  $$('[data-meta]').forEach(b => b.onclick = () => { prefs.meta = Number(b.dataset.meta); prefs.alvo = null; acertarAlvo(); $$('[data-meta]').forEach(x => x.setAttribute('aria-pressed', String(x === b))); aviso.textContent = `Meta do dia: ${prefs.meta} questões.`; });
-  $('#criar-lembrete').onclick = () => { const hora = $('#hora-lembrete').value; if (!/^\d{2}:\d{2}$/.test(hora)) { aviso.textContent = 'Escolha um horário para o lembrete.'; return; } prefs.lembrete = hora; salvarPrefs(); baixarLembrete(hora); aviso.textContent = `Lembrete das ${hora} baixado. Abra o arquivo para colocá-lo no calendário.`; };
+  $$('[data-meta]').forEach(b => b.onclick = () => { prefs.meta = Number(b.dataset.meta); prefs.alvo = null; acertarAlvo(); $$('[data-meta]').forEach(x => x.setAttribute('aria-pressed', String(x === b))); informar(`Meta do dia: ${prefs.meta} questões.`); });
+  $('#criar-lembrete').onclick = () => { const hora = $('#hora-lembrete').value; if (!/^\d{2}:\d{2}$/.test(hora)) { informar('Escolha um horário para o lembrete.', true); return; } prefs.lembrete = hora; salvarPrefs(); baixarLembrete(hora); informar(`Lembrete das ${hora} baixado. Abra o arquivo para colocá-lo no calendário.`); };
   $('#atalhos').onclick = evento => { prefs.atalhos = prefs.atalhos === false; salvarPrefs(); evento.currentTarget.setAttribute('aria-pressed', String(prefs.atalhos)); evento.currentTarget.textContent = `Letras A a E ${prefs.atalhos ? 'ligadas' : 'desligadas'}`; };
   $('#sair').onclick = async () => {
     // Mesmo sem rede, o aparelho é limpo: num celular dividido, nada fica para a próxima pessoa.
     let falha = null;
     try { await api('/api/sair', {}); } catch (e) { falha = e; }
     encerrarLocal(true); cadastro = false; verEntrada();
-    if (falha && falha.status !== 401) aviso.textContent = 'Você saiu neste aparelho. Não foi possível avisar o servidor agora; a sessão antiga vence sozinha.';
+    if (falha && falha.status !== 401) informar('Você saiu neste aparelho. Não foi possível avisar o servidor agora; a sessão antiga vence sozinha.');
   };
   const vez = estado.vez;
   const listar = async () => {
