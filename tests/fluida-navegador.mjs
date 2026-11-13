@@ -370,6 +370,40 @@ await item('telas de estudo sem faixa que corre e sem movimento acima de 0,4 s',
   certo(Math.max(...tempos) <= 0.4, 'movimento mais longo: ' + Math.max(...tempos) + ' s');
   igual(await p.avaliar('Boolean(document.querySelector(".questao .vira"))'), false, 'rótulo que vira fora da folha da questão');
 });
+// Identidade da entrada levada às telas de dentro (12/11/2026): mesmas duas fontes, contorno de 1 px na cor do texto,
+// faixa de areia na largura toda no topo de cada tela, um selo só nas telas de passagem, nada na folha da questão.
+await item('telas de dentro com a identidade da entrada: fontes, contorno, faixa, selo e movimento', async () => {
+  const TEXTO = 'rgb(47, 52, 55)'; const AREIA = 'rgb(247, 246, 243)';
+  for (const largura of [390, 1280]) {
+    await p.tamanho(largura, 900); await dormir(120);
+    for (const destino of ['#estudar', '#progresso', '#simulado', '#nota', '#conta', '#privacidade']) {
+      await p.avaliar(`location.hash = "${destino}"`); await dormir(450);
+      const m = await p.avaliar(`(() => {
+        const c = (e, pseudo) => getComputedStyle(e, pseudo);
+        const familias = new Set([...document.querySelectorAll('body *')].filter(e => e.getClientRects().length).map(e => c(e).fontFamily.split(',')[0].trim().replace(/"/g, '')));
+        const topo = document.querySelector('#conteudo > h1:not(.oculto), .simulador > h1, #conteudo > .ritmo');
+        const fundo = topo ? c(topo, '::before') : null; const titulo = document.querySelector('#conteudo > h1:not(.oculto), .simulador > h1');
+        return {familias: [...familias].sort(), topo: c(document.querySelector('.topo')).borderBottomColor,
+          faixa: fundo && fundo.backgroundColor, larguraFaixa: Boolean(fundo) && parseFloat(fundo.width) >= innerWidth - 20,
+          selo: titulo ? c(titulo, '::after').backgroundImage.startsWith('url("data:image/svg') : null, seloTempo: titulo ? parseFloat(c(titulo, '::after').animationDuration) : 0,
+          seloNaQuestao: [...document.querySelectorAll('.questao, .questao *')].some(e => c(e, '::after').backgroundImage.includes('data:image/svg')),
+          corre: Boolean(document.querySelector('.faixa-corre')), lateral: document.documentElement.scrollWidth <= document.documentElement.clientWidth};
+      })()`);
+      igual(m.familias, ['Iowan Old Style', 'SF Pro Display'], `duas fontes da entrada em ${destino} a ${largura}`);
+      igual(m.topo, TEXTO, `contorno do topo em ${destino}`);
+      igual(m.faixa, AREIA, `faixa de areia no topo de ${destino}`); igual(m.larguraFaixa, true, `faixa na largura toda em ${destino} a ${largura}`);
+      igual(m.selo, destino === '#estudar' ? null : true, `selo só nas telas de passagem (${destino})`);
+      certo(m.seloTempo <= 0.4, `selo assenta em até 0,4 s em ${destino}`);
+      igual(m.seloNaQuestao, false, `folha da questão sem selo em ${destino}`); igual(m.corre, false, `sem faixa que corre em ${destino}`);
+      igual(m.lateral, true, `sem rolagem lateral em ${destino} a ${largura}`);
+    }
+  }
+  igual(await p.avaliar('getComputedStyle(document.querySelector("#menu")).borderTopColor'), TEXTO, 'contorno do menu');
+  await p.s('Emulation.setEmulatedMedia', {features: [{name: 'prefers-reduced-motion', value: 'reduce'}]});
+  try { await dormir(100); igual(await p.avaliar('getComputedStyle(document.querySelector("#conteudo > h1:not(.oculto)"), "::after").animationName'), 'none', 'selo parado com movimento reduzido'); }
+  finally { await p.s('Emulation.setEmulatedMedia', {features: []}); }
+  await p.tamanho(390, 844); await p.avaliar('location.hash = "#estudar"'); await questaoPronta();
+});
 await item('duas contas não se misturam', async () => {
   igual(sql("SELECT COUNT(*) FROM respostas r JOIN contas c ON c.id=r.conta WHERE c.nome='Segunda'")[0][0], 1, 'respostas da segunda conta');
   igual(await p.avaliar('painel.progresso.total'), 1, 'painel da segunda conta');
