@@ -32,6 +32,7 @@ Nada aqui foi medido com estudantes reais do PU. São hipóteses de produto.
 8. **Progresso que aponta o próximo passo.** Revisão vencida, assunto mais fraco ou continuar, sempre com um botão.
 9. **Lembrete e atalho.** Lembrete diário por evento de calendário gerado no aparelho (o PU não envia notificações) e atalho de tela inicial pelo manifesto.
 10. **Menu.** Cinco destinos: Estudar, Progresso, Simulado, Nota e Conta. No celular fica embaixo, ao alcance do polegar; no computador, no cabeçalho, como no site da Ginga. Esta é a única mudança em relação ao pedido de 09/11 (menu recolhido por botão no celular).
+11. **Movimento e visual da identidade (referência Slush).** Curva de mola (`--mola`), botão principal que vira no passar do ponteiro e no foco pelo teclado (fora da folha da questão e do marco), entrada em faixas de papel na largura toda com título de cartaz, três selos próprios e uma faixa que corre, alternativa corrigida que assenta em 0,4 s e contorno de 1 px na cor do texto. Tudo para com movimento reduzido; nas telas de estudo nada passa de 0,4 s. Regras na nota "Identidade visual do site VpT", seção "Movimento e visual vindos da referência Slush".
 
 ## Servidor e rede
 
@@ -56,7 +57,7 @@ Nada aqui foi medido com estudantes reais do PU. São hipóteses de produto.
 ## Verificação
 
 - `python3 tests/testar.py` (11), `tests/acompanhamento.py` (6), `tests/conjuntos.py` (8), `tests/sincronizacao.py` (6), `node tests/simulador.cjs`, `node tests/intermediario.mjs`.
-- `node tests/fluida-navegador.mjs [pasta]`: 33 itens no Chrome sem janela, com banco e catálogo temporários, inclusive a entrada pública com o intermediário simulado. Não usa `npm install`.
+- `node tests/fluida-navegador.mjs [pasta]`: 35 itens no Chrome sem janela, com banco e catálogo temporários, inclusive a entrada pública com o intermediário simulado. Não usa `npm install`.
 - `python3 tests/ambientes.py`: Docker real com ambientes individuais e banco sintético. Falhava desde que o catálogo passou a vir só de arquivo; recebeu catálogo de teste e voltou a passar.
 - Revisão independente em 12/11/2026 (agente Opus, sem editar): 25 pontos. Corrigidos: simulado que travava ao recarregar com envio pendente, contagem do dia fora do fuso de Brasília, painel antigo sobrescrevendo resposta, revisão aceitando acerto adiantado, alternativa travada depois do primeiro envio, anúncio para leitor de tela, cor da alternativa certa, contraste das bordas, atalhos de letra desligáveis, saída que sempre limpa o aparelho, preferências separadas por conta e textos. Não corrigidos: falta de solução comentada (conteúdo) e os 27 KB do campo `questoes` no painel (mantido para a interface antiga que ainda estiver em cache).
 - Os testes `.cjs` de navegador anteriores descrevem a interface antiga e dependem do `playwright-core`; ficaram no repositório até Dominique decidir se saem.
@@ -66,3 +67,4 @@ Nada aqui foi medido com estudantes reais do PU. São hipóteses de produto.
 - 12/11/2026 19:48 · Dominique-Oliveira-Claude🤖🧡 · Documento criado com o desenho, a pesquisa e a verificação. **Por quê:** pedido de Dominique Oliveira🐧❤️ de refazer o PU para aprender mais, com menos atrito e menos tédio.
 - 12/11/2026 20:07 · Dominique-Oliveira-Claude🤖🧡 · Acrescentadas as correções da revisão independente, o gerenciador permanente e a entrada pública com política de conteúdo e atalho de tela inicial. **Por quê:** registrar o que mudou entre a primeira versão e a publicada.
 - 12/11/2026 20:37 · Dominique-Oliveira-Claude🤖🧡 · Acertados os números do conector e do navegador, acrescentados o lembrete diário e o limite de 3 s por viagem na fila pública. **Por quê:** deixar o documento igual ao que foi publicado.
+- 12/11/2026 21:01 · Dominique-Oliveira-Claude🤖🧡 · Aplicadas as animações e o visual vindos da referência Slush (item 11) e acrescentados dois itens ao teste de navegador (faixa que corre, selos, nome acessível único, movimento reduzido e teto de 0,4 s nas telas de estudo). **Por quê:** Dominique autorizou aplicar e publicar o que a identidade registrou.

@@ -111,6 +111,49 @@ await item('entrada explica o PU antes do cadastro e deixa experimentar uma ques
 await item('entrada sem rolagem lateral em 320, 360, 390, 412, 768 e 1280', async () => {
   for (const largura of [320, 360, 412, 768, 1280, 390]) { await p.tamanho(largura, 844); await dormir(120); certo(await p.semRolagemLateral(), 'rolagem lateral em ' + largura); }
 });
+// Nome acessível calculado pelo próprio Chrome (árvore de acessibilidade), para provar que o rótulo que vira não duplica.
+const nomeAcessivel = async seletor => {
+  const {root} = await p.s('DOM.getDocument', {depth: 0}); const {nodeId} = await p.s('DOM.querySelector', {nodeId: root.nodeId, selector: seletor});
+  const {nodes} = await p.s('Accessibility.getPartialAXTree', {nodeId, fetchRelatives: false}); return nodes[0]?.name?.value ?? null;
+};
+await item('entrada nova: faixa que corre, selos fora da leitura e botão principal com um nome só', async () => {
+  await p.tamanho(390, 844); await p.clicar('#trocar'); await p.esperar('document.querySelector("#acesso") && !document.querySelector("#nome")');
+  igual(await p.avaliar('document.querySelectorAll(".faixa-corre").length'), 1, 'uma faixa que corre');
+  igual(await p.avaliar('getComputedStyle(document.querySelector(".trilho")).animationName'), 'correr-faixa', 'faixa correndo');
+  const velocidade = await p.avaliar('document.querySelector(".frases").offsetWidth / parseFloat(getComputedStyle(document.querySelector(".trilho")).animationDuration)');
+  certo(velocidade > 30 && velocidade < 50, 'cerca de 40 px/s, veio ' + velocidade);
+  igual(await p.avaliar('[...document.querySelectorAll(".frases")].map(l => l.getAttribute("aria-hidden"))'), [null, 'true'], 'cópia da faixa fora da leitura de tela');
+  igual(await p.avaliar('getComputedStyle(document.querySelector(".faixa-corre")).overflowX'), 'clip', 'faixa recortada');
+  const selos = await p.avaliar('[...document.querySelectorAll(".selos-cartaz")].map(s => ({oculto: s.getAttribute("aria-hidden"), desenhos: s.querySelectorAll("svg").length, noTitulo: Boolean(s.closest("h1"))}))');
+  igual(selos, [{oculto: 'true', desenhos: 3, noTitulo: true}], 'selos encostados no título e fora da leitura');
+  igual(await nomeAcessivel('.apresentacao h1'), 'Estude para o Enem uma questão por vez.', 'título sem os selos no nome');
+  const botao = '#acesso button[type=submit]';
+  igual(await p.avaliar(`[...document.querySelector("${botao}").querySelectorAll(".vira-a, .vira-b")].map(e => e.className + ":" + e.getAttribute("aria-hidden"))`), ['vira-a:null', 'vira-b:true'], 'rótulo duplicado com aria-hidden na cópia');
+  igual(await nomeAcessivel(botao), 'Entrar', 'nome acessível único'); igual((await p.texto(botao)).trim(), 'Entrar', 'innerText único');
+  igual(await p.avaliar('[...document.querySelectorAll("#menu a")].every(a => a.querySelector(".vira-b[aria-hidden=true]"))'), true, 'menu com o rótulo que vira');
+  for (const largura of [320, 360, 390, 412, 768, 1280]) { await p.tamanho(largura, 844); await dormir(120); certo(await p.semRolagemLateral(), 'rolagem lateral na entrada nova em ' + largura); }
+  // Com ponteiro fino, passar sobre o botão troca o rótulo; o nome acessível continua um só.
+  if (await p.avaliar('matchMedia("(hover:hover) and (pointer:fine)").matches')) {
+    const centro = await p.avaliar(`(() => { const e = document.querySelector("${botao}"); e.scrollIntoView({block: "center"}); const r = e.getBoundingClientRect(); return {x: r.x + r.width / 2, y: r.y + r.height / 2}; })()`);
+    await p.s('Input.dispatchMouseEvent', {type: 'mouseMoved', x: centro.x, y: centro.y}); await dormir(900);
+    igual(await p.avaliar(`getComputedStyle(document.querySelector("${botao} .vira-b")).visibility`), 'visible', 'cópia aparece no passar do ponteiro');
+    igual(await nomeAcessivel(botao), 'Entrar', 'nome único com o rótulo virado');
+    await p.s('Input.dispatchMouseEvent', {type: 'mouseMoved', x: 1, y: 1});
+  }
+  // Foco pelo teclado também vira o rótulo (o Chrome sem janela não tem ponteiro fino).
+  await p.tecla('x'); await p.avaliar(`document.querySelector("${botao}").focus()`); await dormir(900);
+  igual(await p.avaliar(`[getComputedStyle(document.querySelector("${botao} .vira-b")).visibility, getComputedStyle(document.querySelector("${botao} .vira-a")).opacity]`), ['visible', '0'], 'rótulo virado no foco pelo teclado');
+  igual(await nomeAcessivel(botao), 'Entrar', 'nome único com o rótulo virado'); igual((await p.texto(botao)).trim().startsWith('Entrar'), true, 'texto do botão');
+  await p.avaliar('document.activeElement.blur()');
+  await p.s('Emulation.setEmulatedMedia', {features: [{name: 'prefers-reduced-motion', value: 'reduce'}]});
+  try {
+    await dormir(100);
+    igual(await p.avaliar('getComputedStyle(document.querySelector(".trilho")).animationName'), 'none', 'faixa parada com movimento reduzido');
+    igual(await p.avaliar('getComputedStyle(document.querySelector(".trilho")).transform'), 'none', 'faixa no início');
+    igual(await p.avaliar('[...document.querySelectorAll(".entrada > *")].map(e => getComputedStyle(e).animationName)'), ['none', 'none', 'none', 'none'], 'entrada sem animação');
+  } finally { await p.s('Emulation.setEmulatedMedia', {features: []}); }
+  await p.tamanho(390, 844); await dormir(100);
+});
 await item('cadastro cai direto numa questão curta, sem clique a mais', async () => {
   await cadastrar('Primeira');
   const id = await idAtual(); certo(id > 0 && !q(id).imagens.length && !q(id).grupo, 'primeira questão curta, veio ' + id);
@@ -316,6 +359,16 @@ await item('telas de estudo sem rolagem lateral em 320, 768 e 390', async () => 
   const medida = await p.avaliar('(() => { const b = document.querySelector(".barra-acao").getBoundingClientRect(), m = document.querySelector("#menu").getBoundingClientRect(); return {barra: Math.round(b.bottom), menu: Math.round(m.top), janela: innerHeight, rolagem: Math.round(scrollY)}; })()');
   certo(medida.barra <= medida.menu + 1, 'barra de ação acima do menu: ' + JSON.stringify(medida));
   if (CAPTURAS) await p.captura(path.join(CAPTURAS, 'estudar-390.png'), false);
+});
+await item('telas de estudo sem faixa que corre e sem movimento acima de 0,4 s', async () => {
+  for (const destino of ['#estudar', '#progresso', '#simulado', '#conta']) {
+    await p.avaliar(`location.hash = "${destino}"`); await dormir(250);
+    igual(await p.avaliar('Boolean(document.querySelector(".faixa-corre, .selos-cartaz"))'), false, 'faixa ou selos em ' + destino);
+  }
+  await p.avaliar('location.hash = "#estudar"'); await questaoPronta();
+  const tempos = await p.avaliar(`[...document.querySelectorAll("#conteudo > *, .alternativa, .barra-acao button")].flatMap(e => { const c = getComputedStyle(e); return [...c.animationDuration.split(","), ...c.transitionDuration.split(",")].map(t => parseFloat(t) * (t.trim().endsWith("ms") ? 0.001 : 1)); })`);
+  certo(Math.max(...tempos) <= 0.4, 'movimento mais longo: ' + Math.max(...tempos) + ' s');
+  igual(await p.avaliar('Boolean(document.querySelector(".questao .vira"))'), false, 'rótulo que vira fora da folha da questão');
 });
 await item('duas contas não se misturam', async () => {
   igual(sql("SELECT COUNT(*) FROM respostas r JOIN contas c ON c.id=r.conta WHERE c.nome='Segunda'")[0][0], 1, 'respostas da segunda conta');

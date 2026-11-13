@@ -306,6 +306,22 @@ function tela(html) {
   conteudo.classList.remove('entrou'); void conteudo.offsetWidth; conteudo.classList.add('entrou');
 }
 function subir() { window.scrollTo(0, 0); }
+// Botão que vira: o rótulo sai girando e uma cópia entra por baixo (só com ponteiro fino ou foco pelo teclado, regras no estilo.css).
+// A cópia tem aria-hidden e fica com visibility: hidden fora do movimento, então nem o nome acessível nem o innerText duplicam.
+// Fica fora da folha da questão e do marco da meta: nas telas de estudo nenhum movimento passa de 0,4 s.
+const VIRA = 'button:not(.discreto):not(.texto-botao):not(.ficha), a.botao:not(.discreto), #menu a > span';
+function prepararViradas(raiz) {
+  for (const alvo of raiz.querySelectorAll(VIRA)) {
+    if (alvo.closest('.questao, .marco') || alvo.childNodes.length !== 1 || alvo.firstChild.nodeType !== Node.TEXT_NODE) continue;
+    const texto = alvo.textContent.trim(); if (!texto) continue;
+    const vira = document.createElement('span'); vira.className = 'vira';
+    const primeiro = document.createElement('span'); primeiro.className = 'vira-a'; primeiro.textContent = texto;
+    const segundo = document.createElement('span'); segundo.className = 'vira-b'; segundo.setAttribute('aria-hidden', 'true'); segundo.textContent = texto;
+    vira.append(primeiro, segundo); alvo.replaceChildren(vira);
+  }
+}
+new MutationObserver(() => prepararViradas(conteudo)).observe(conteudo, {childList: true, subtree: true});
+prepararViradas(menu);
 const anuncio = document.createElement('p'); anuncio.id = 'anuncio'; anuncio.className = 'oculto'; anuncio.setAttribute('role', 'status'); anuncio.setAttribute('aria-live', 'polite'); document.body.append(anuncio);
 function anunciar(texto) { anuncio.textContent = ''; setTimeout(() => { anuncio.textContent = texto; }, 60); }
 const mostrar = elemento => elemento?.scrollIntoView({block: 'nearest', behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth'});
@@ -324,21 +340,37 @@ const DEMONSTRACAO = {
     'Os raios X ionizam os materiais metálicos normalmente encontrados em bagagens de mão, quando difratados pelos componentes do computador.'
   ]
 };
+// Selos desenhados para o PU (livro, visto, calendário), só na entrada e fora da leitura de tela.
+const SELOS = `<span class="selos-cartaz" aria-hidden="true">
+<svg class="selo-desenho giro-livro" viewBox="0 0 64 64" focusable="false"><path class="f-azul" d="M5 17c9-5 18-5 27 1 9-6 18-6 27-1v32c-9-5-18-5-27 1-9-6-18-6-27-1z"/><path class="f-nada" d="M32 18v32M11 26c5-2 10-2 15 0M11 33c5-2 10-2 15 0M38 33c5-2 10-2 15 0"/><path class="f-amarelo" d="M41 15v15l4-3 4 3V14z"/></svg>
+<svg class="selo-desenho giro-visto" viewBox="0 0 64 64" focusable="false"><circle class="f-azul" cx="32" cy="32" r="26"/><path class="f-amarelo" d="M16 33l6-6 7 7 13-15 6 6-19 21z"/></svg>
+<svg class="selo-desenho giro-calendario" viewBox="0 0 64 64" focusable="false"><rect class="f-azul" x="8" y="13" width="48" height="43" rx="4"/><path class="f-nada" d="M8 25h48M20 8v10M44 8v10"/><rect class="f-nada" x="15" y="32" width="8" height="7"/><rect class="f-amarelo" x="28" y="32" width="8" height="7"/><rect class="f-nada" x="41" y="32" width="8" height="7"/><rect class="f-nada" x="15" y="44" width="8" height="7"/><rect class="f-nada" x="28" y="44" width="8" height="7"/></svg>
+</span>`;
+// Faixa que corre: frases que a entrada já diz. A cópia fica fora da leitura de tela; parada com movimento reduzido.
+const FRASES_FAIXA = ['Questões oficiais do Enem', 'Uma questão por vez', 'O que você erra volta em 1, 3 e 7 dias', 'Meta pequena por dia', 'Gratuito'];
+function faixaQueCorre() {
+  const lista = copia => `<ul class="frases"${copia ? ' aria-hidden="true"' : ' aria-label="O que o PU oferece"'}>${[...FRASES_FAIXA, ...FRASES_FAIXA].map(f => `<li>${f}</li>`).join('')}</ul>`;
+  return `<div class="faixa-corre"><div class="trilho">${lista(false)}${lista(true)}</div></div>`;
+}
+// Cerca de 40 px por segundo, qualquer que seja a largura das frases.
+function ajustarFaixa() { const trilho = $('.trilho'); if (trilho) trilho.style.animationDuration = `${Math.max(20, trilho.firstElementChild.offsetWidth / 40).toFixed(1)}s`; }
+window.addEventListener('resize', ajustarFaixa);
 function verEntrada() {
   menu.hidden = true; document.body.classList.add('sem-sessao');
   const indisponivel = publico && !conexao.habilitado;
   const q = DEMONSTRACAO;
   tela(`<div class="entrada">
-<section class="apresentacao">
-<h1>Estude para o Enem uma questão por vez.</h1>
+<div class="faixa faixa-papel"><section class="apresentacao">
+<h1>Estude para o Enem uma questão por vez.${SELOS}</h1>
 <p class="lide">Você abre o PU e a questão do dia já está na tela. Responde, confere na hora e para quando quiser.</p>
 <ol class="passos">
 <li><strong>Questões oficiais do Enem</strong><span>Provas de 2024 e 2025, de todas as matérias, misturadas ou da matéria que você escolher.</span></li>
 <li><strong>O que você erra volta</strong><span>As erradas e os chutes reaparecem na revisão depois de 1, 3 e 7 dias.</span></li>
 <li><strong>Meta pequena por dia</strong><span>Cinco questões já contam. Você vê o que fez na semana e onde precisa treinar.</span></li>
 </ol>
-</section>
-<section class="formulario" aria-labelledby="titulo-acesso">
+</section></div>
+${faixaQueCorre()}
+<div class="faixa faixa-azul"><section class="formulario" aria-labelledby="titulo-acesso">
 <h2 id="titulo-acesso">${cadastro ? 'Crie sua conta' : 'Entre para estudar'}</h2>
 ${indisponivel ? '<p class="nota" role="status">O acesso público está em configuração. Ainda não é possível entrar.</p>' : ''}
 <form id="acesso">
@@ -351,16 +383,17 @@ ${cadastro ? '<label for="nome">Como você se chama?</label><input id="nome" nam
 </form>
 <button class="discreto troca" id="trocar" type="button">${cadastro ? 'Já tenho uma conta' : 'Quero criar uma conta'}</button>
 <p class="privacidade"><small>É gratuito. Guardamos seu nome, e-mail e respostas para mostrar seu progresso. Use dados de teste nesta versão inicial. <a href="#privacidade">Dados e segurança</a></small></p>
-</section>
-<section class="experimente" aria-labelledby="titulo-experimente">
+</section></div>
+<div class="faixa faixa-areia"><section class="experimente" aria-labelledby="titulo-experimente">
 <h2 id="titulo-experimente">Experimente uma questão</h2>
 <p class="rotulo">${escapar(q.materia)} · ${escapar(q.titulo)} · demonstração, não fica registrada</p>
 <div class="enunciado">${enunciadoHtml(q.enunciado, q)}</div>
 <fieldset id="demonstracao"><legend>Toque na alternativa que você marcaria</legend>${q.alternativas.map((a, i) => `<label class="alternativa"><input type="radio" name="demonstracao" value="${i}"><span class="letra">${letra(i)}</span><span class="texto">${escapar(a)}</span></label>`).join('')}</fieldset>
 <div id="retorno-demonstracao" class="retorno" aria-live="polite"></div>
 <p class="fonte"><a href="${escapar(q.fonte)}" target="_blank" rel="noopener noreferrer">Prova original no site do Inep</a></p>
-</section>
+</section></div>
 </div>`);
+  ajustarFaixa();
   $('#trocar').onclick = () => { cadastro = !cadastro; verEntrada(); $('#acesso input').focus(); };
   $('#demonstracao').onchange = evento => {
     const escolhida = Number(evento.target.value); const campo = $('#demonstracao');
