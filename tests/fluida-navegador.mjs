@@ -55,8 +55,8 @@ const estatico = http.createServer((pedido, resposta) => {
   const caminho = decodeURIComponent(new URL(pedido.url, URL_PUBLICA).pathname);
   if (caminho === '/configuracao-publica.js') { resposta.writeHead(200, {'Content-Type': 'text/javascript'}); return resposta.end(`window.ENEM_PUBLICO = Object.freeze({habilitado: true, intermediario: '${INTERMEDIARIO}'});`); }
   const arquivo = path.join(RAIZ, caminho === '/' ? 'index.html' : caminho);
-  if (!arquivo.startsWith(RAIZ) || !/^\/(index\.html)?$|^\/app\/public\/[a-z.]+$|^\/manifest\.webmanifest$|^\/icones\/[a-z0-9.-]+$/.test(caminho) || !fs.existsSync(arquivo)) { resposta.writeHead(404); return resposta.end(); }
-  resposta.writeHead(200, {'Content-Type': {'.html': 'text/html; charset=utf-8', '.js': 'text/javascript', '.css': 'text/css', '.svg': 'image/svg+xml', '.png': 'image/png', '.webmanifest': 'application/manifest+json'}[path.extname(arquivo)]});
+  if (!arquivo.startsWith(RAIZ) || !/^\/(index\.html)?$|^\/app\/public\/(?:(?:fontes|ilustracoes)\/)?[a-z0-9][a-z0-9-]*(?:\.[a-z0-9]+)+$|^\/manifest\.webmanifest$|^\/icones\/[a-z0-9.-]+$/.test(caminho) || !fs.existsSync(arquivo)) { resposta.writeHead(404); return resposta.end(); }
+  resposta.writeHead(200, {'Content-Type': {'.html': 'text/html; charset=utf-8', '.js': 'text/javascript', '.css': 'text/css', '.svg': 'image/svg+xml', '.png': 'image/png', '.webp': 'image/webp', '.woff2': 'font/woff2', '.webmanifest': 'application/manifest+json'}[path.extname(arquivo)]});
   // A política de conteúdo da entrada pública aponta para o intermediário real; no teste, para o simulado.
   resposta.end(caminho === '/' ? fs.readFileSync(arquivo, 'utf8').replace('https://enem-ginga-conexao.sabrinaconradoadv.chatgpt.site', INTERMEDIARIO) : fs.readFileSync(arquivo));
 }).listen(portaPublica, '127.0.0.1');
@@ -153,9 +153,93 @@ await item('entrada nova: faixa que corre, selos fora da leitura e botão princi
     await dormir(100);
     igual(await p.avaliar('getComputedStyle(document.querySelector(".trilho")).animationName'), 'none', 'faixa parada com movimento reduzido');
     igual(await p.avaliar('getComputedStyle(document.querySelector(".trilho")).transform'), 'none', 'faixa no início');
-    igual(await p.avaliar('[...document.querySelectorAll(".entrada > *")].map(e => getComputedStyle(e).animationName)'), ['none', 'none', 'none', 'none'], 'entrada sem animação');
+    igual(await p.avaliar('[...new Set([...document.querySelectorAll(".entrada > *, .entrada *")].map(e => getComputedStyle(e).animationName))]'), ['none'], 'entrada sem animação, inclusive a boia e o livro da cena');
   } finally { await p.s('Emulation.setEmulatedMedia', {features: []}); }
   await p.tamanho(390, 844); await dormir(100);
+});
+// Página de entrada de 14/11/2026: texto no HTML, seções na ordem do plano de páginas, provas de um lugar só, endereços do formulário,
+// duas fontes, contraste AA, formulário limpo e cabeçalho de compartilhamento igual nos dois index.html.
+const SECOES_ENTRADA = ['apresentacao', 'experimente', 'como-funciona', 'o-que-voce-ganha', 'provas', 'por-que', 'perguntas', 'entrar'];
+await item('entrada de 14/11: texto da apresentação no HTML, seções na ordem, provas no ar de um lugar só, duas fontes e contraste AA', async () => {
+  const bloco = arquivo => { const t = fs.readFileSync(path.join(RAIZ, arquivo), 'utf8'); const i = t.indexOf('<!-- entrada:inicio'), f = t.indexOf('<!-- entrada:fim -->'); certo(i > 0 && f > i, 'bloco da entrada em ' + arquivo); return t.slice(i, f); };
+  const [raiz, aplicacao] = ['index.html', 'app/public/index.html'].map(bloco);
+  igual(raiz, aplicacao, 'mesmo bloco nos dois index.html');
+  certo(raiz.includes('<div class="entrada" data-estatica>'), 'bloco marcado como molde');
+  for (const id of SECOES_ENTRADA) certo(raiz.includes(`id="${id}"`), 'seção no HTML: ' + id);
+  const fonteApp = fs.readFileSync(path.join(RAIZ, 'app/public/app.js'), 'utf8');
+  for (const trecho of ['Como funciona', 'O que você ganha', 'Perguntas frequentes', 'Por que estudar assim', 'Quanto custa?']) { certo(raiz.includes(trecho), 'texto no HTML: ' + trecho); certo(!fonteApp.includes(trecho), 'texto só no HTML, fora do app.js: ' + trecho); }
+  const cabeca = arquivo => { const t = fs.readFileSync(path.join(RAIZ, arquivo), 'utf8'); return [(t.match(/<title>[^<]+<\/title>/) || [''])[0]].concat(['name="description"', 'rel="canonical"', 'og:title', 'og:description', 'og:image"', 'og:url', 'twitter:card'].map(c => (t.match(new RegExp('<[^>]*' + c.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '[^>]*>')) || [''])[0])); };
+  const [c1, c2] = ['index.html', 'app/public/index.html'].map(cabeca);
+  certo(c1.every(Boolean), 'título, descrição e compartilhamento: ' + JSON.stringify(c1)); igual(c1, c2, 'cabeçalho igual nos dois index.html');
+  // Sem JavaScript o molde fica escondido: quem tem sessão guardada não vê a apresentação antes da questão.
+  await p.s('Emulation.setScriptExecutionDisabled', {value: true});
+  try { await p.ir(URL_LOCAL); igual(await p.avaliar('getComputedStyle(document.querySelector(".entrada[data-estatica]")).display'), 'none', 'molde escondido até o app.js decidir'); }
+  finally { await p.s('Emulation.setScriptExecutionDisabled', {value: false}); }
+  await p.tamanho(390, 844); await p.ir(URL_LOCAL); await p.esperar('document.querySelector("#acesso")'); await p.avaliar('document.fonts.ready');
+  igual(await p.avaliar('[...document.querySelectorAll(".entrada section[id]")].map(s => s.id)'), SECOES_ENTRADA, 'seções na ordem do plano de páginas');
+  igual(await p.avaliar('document.querySelectorAll(".entrada[data-estatica], [data-lugar=faixa-que-corre]").length'), 0, 'molde trocado pela página desenhada');
+  const provas = await p.avaliar(`({lista: PROVAS_NO_AR.map(x => x.prova + ' ' + x.edicao), total: PROVAS_NO_AR.reduce((s, x) => s + x.questoes, 0),
+    itens: [...document.querySelectorAll('.provas-lista li strong')].map(e => e.textContent), numero: document.querySelector('.numero-cartaz strong').textContent,
+    outras: (document.querySelector('.entrada').innerText.match(/Fuvest|USP|Unesp|Unicamp|Famerp/g) || [])})`);
+  igual(provas.itens, provas.lista, 'provas desenhadas a partir de PROVAS_NO_AR'); igual(provas.numero, provas.total.toLocaleString('pt-BR'), 'total do banco');
+  igual(provas.lista, ['Enem 2024', 'Enem 2025'], 'no ar hoje só o Enem 2024 e o 2025'); igual(provas.outras, [], 'nenhuma prova prometida antes de entrar no banco');
+  const fontes = await p.avaliar(`({usadas: [...new Set([...document.querySelectorAll('body *')].filter(e => e.getClientRects().length && [...e.childNodes].some(n => n.nodeType === 3 && n.textContent.trim())).map(e => getComputedStyle(e).fontFamily.split(',')[0].replace(/"/g, '')))].sort(),
+    baixadas: [...new Set([...document.fonts].filter(f => f.status === 'loaded').map(f => f.family.replace(/"/g, '')))].sort()})`);
+  igual(fontes.usadas, ['Atkinson Hyperlegible Next', 'Bricolage Grotesque'], 'só Bricolage e Atkinson na entrada'); igual(fontes.baixadas, ['Atkinson Hyperlegible Next', 'Bricolage Grotesque'], 'Newsreader e JetBrains Mono não baixam');
+  for (const largura of [390, 768, 1440]) {
+    await p.tamanho(largura, 900); await dormir(150);
+    const fracos = await p.avaliar(`(() => { const cor = t => (t.match(/[\\d.]+/g) || []).map(Number);
+      const lum = ([r, g, b]) => [r, g, b].map(c => { c /= 255; return c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4; }).reduce((s, c, i) => s + c * [0.2126, 0.7152, 0.0722][i], 0);
+      const razao = (a, b) => { const [x, y] = [lum(a), lum(b)].sort((m, n) => n - m); return Math.round((x + 0.05) / (y + 0.05) * 100) / 100; };
+      const fundo = e => { for (let x = e; x; x = x.parentElement) { const v = cor(getComputedStyle(x).backgroundColor); if (v.length === 3 || v[3] > 0.5) return v.slice(0, 3); } return [255, 255, 255]; };
+      return [...document.querySelectorAll('body *')].filter(e => e.getClientRects().length && !e.closest('.oculto, button:disabled') && [...e.childNodes].some(n => n.nodeType === 3 && n.textContent.trim()))
+        .map(e => [e.tagName + '.' + e.className + ' "' + e.textContent.trim().slice(0, 24) + '"', razao(cor(getComputedStyle(e).color).slice(0, 3), fundo(e))]).filter(([, r]) => r < 4.5); })()`);
+    igual(fracos, [], 'contraste AA em ' + largura);
+    // Formulário limpo: nenhum selo, tarja, cena ou pegada sobre ele ou a menos de 16 px.
+    const encostados = await p.avaliar(`(() => { const f = document.querySelector('.formulario').getBoundingClientRect();
+      return [...document.querySelectorAll('.selo-desenho, .selo-novo, .tarja, .cena-mar, .pegadas, .faixa-corre')].filter(e => { const r = e.getBoundingClientRect(); return r.right > f.left - 16 && r.left < f.right + 16 && r.bottom > f.top - 16 && r.top < f.bottom + 16; }).map(e => e.className.baseVal ?? e.className); })()`);
+    igual(encostados, [], 'formulário limpo em ' + largura);
+    certo(await p.semRolagemLateral(), 'rolagem lateral em ' + largura);
+  }
+  await p.tamanho(390, 844); await dormir(100);
+  // Cores de decoração da página: azul-mar, amarelo-sol e laranja-boia; nada de rosa-goiaba nem roxo-ipê.
+  const decoracao = await p.avaliar(`(() => { const sonda = document.createElement('span'); document.body.append(sonda); const valor = v => { sonda.style.color = 'var(' + v + ')'; return getComputedStyle(sonda).color; };
+    const proibidas = ['--rosa-goiaba', '--roxo-ipe', '--rosa-claro', '--roxo-claro'].map(valor); sonda.remove();
+    const usadas = new Set([...document.querySelectorAll('.entrada, .entrada *')].flatMap(e => { const c = getComputedStyle(e); return [c.backgroundColor, c.fill, c.color]; }));
+    return proibidas.filter(c => usadas.has(c)); })()`);
+  igual(decoracao, [], 'sem rosa-goiaba nem roxo-ipê na entrada');
+});
+await item('entrada de 14/11: ?criar-conta, #entrar e o link Entrar do topo levam ao formulário; o formulário continua igual', async () => {
+  const noFormulario = () => p.avaliar('(() => { const r = document.querySelector("#entrar").getBoundingClientRect(); return r.top >= 0 && r.top < innerHeight / 2; })()');
+  await p.tamanho(390, 844); await p.ir(URL_LOCAL + '/?criar-conta'); await p.esperar('document.querySelector("#nome")'); await dormir(300);
+  certo(await noFormulario(), '?criar-conta rola até o formulário'); igual(await p.avaliar('document.activeElement.id'), 'nome', 'foco no primeiro campo do cadastro');
+  igual(await p.texto('#titulo-acesso'), 'Crie sua conta', 'título do cadastro');
+  await p.ir(URL_LOCAL + '/#entrar'); await p.esperar('document.querySelector("#acesso") && !document.querySelector("#nome")'); await dormir(300);
+  certo(await noFormulario(), '#entrar rola até o formulário'); igual(await p.avaliar('document.activeElement.id'), 'email', 'foco no e-mail');
+  await p.ir(URL_LOCAL + '/#criar-conta'); await p.esperar('document.querySelector("#nome")'); await dormir(300); certo(await noFormulario(), '#criar-conta rola até o formulário');
+  await p.ir(URL_LOCAL); await p.esperar('document.querySelector("#acesso")'); await p.avaliar('scrollTo(0, 0)');
+  certo(await p.avaliar('getComputedStyle(document.querySelector(".entrar-topo")).display !== "none" && document.querySelector(".entrar-topo").getBoundingClientRect().height >= 44'), 'link Entrar no topo da entrada, com 44 px de toque');
+  await p.clicar('.entrar-topo'); await dormir(900); certo(await noFormulario(), 'link Entrar do topo leva ao formulário'); igual(await p.avaliar('document.activeElement.id'), 'email', 'foco no e-mail pelo topo');
+  // Responder a demonstração e pedir a conta troca só o formulário: a demonstração respondida continua.
+  await p.clicar('#demonstracao input[value="3"]'); await p.clicar('#quero-conta'); await p.esperar('document.querySelector("#nome")'); await dormir(600);
+  igual(await p.avaliar('document.querySelector("#demonstracao").disabled'), true, 'demonstração continua respondida'); certo(await noFormulario(), 'Criar minha conta leva ao formulário');
+  await p.clicar('#trocar'); await p.esperar('!document.querySelector("#nome")'); igual(await p.texto('#titulo-acesso'), 'Entre para estudar', 'troca para entrar');
+  igual(await p.avaliar('[...document.querySelectorAll("#acesso input")].map(i => i.name + ":" + i.type + ":" + i.autocomplete)'), ['email:text:username', 'senha:password:current-password'], 'campos da entrada iguais');
+  await p.clicar('#trocar'); await p.esperar('document.querySelector("#nome")');
+  igual(await p.avaliar('[...document.querySelectorAll("#acesso input")].map(i => i.name + ":" + i.type + ":" + i.autocomplete + ":" + i.minLength)'), ['nome:text:name:2', 'email:email:username:-1', 'senha:password:new-password:12'], 'campos do cadastro iguais');
+  await p.clicar('#trocar'); await p.esperar('!document.querySelector("#nome")');
+  await p.preencher('#email', 'digitado@example.com'); await p.clicar('#trocar'); await p.esperar('document.querySelector("#nome")');
+  igual(await p.avaliar('document.querySelector("#email").value'), 'digitado@example.com', 'trocar de modo mantém o e-mail digitado');
+  await p.clicar('#trocar'); await p.esperar('!document.querySelector("#nome")');
+  // Faixa que corre com botão de pausa (no celular não há ponteiro para pará-la).
+  await p.clicar('.pausar-faixa');
+  igual(await p.avaliar('[getComputedStyle(document.querySelector(".trilho")).animationPlayState, document.querySelector(".pausar-faixa").getAttribute("aria-pressed")]'), ['paused', 'true'], 'faixa pausada pelo botão');
+  await p.clicar('.pausar-faixa'); await p.avaliar('document.activeElement.blur()');
+  igual(await p.avaliar('getComputedStyle(document.querySelector(".trilho")).animationPlayState'), 'running', 'faixa segue de novo');
+  // Foco visível no link do topo, com contraste de pelo menos 3:1 sobre o branco.
+  await p.tecla('x'); await p.avaliar('document.querySelector(".entrar-topo").focus()');
+  igual(await p.avaliar('[getComputedStyle(document.querySelector(".entrar-topo")).outlineStyle, getComputedStyle(document.querySelector(".entrar-topo")).outlineColor]'), ['solid', 'rgb(39, 71, 245)'], 'foco azul-mar no link do topo');
+  await p.avaliar('document.activeElement.blur(); scrollTo(0, 0)');
 });
 await item('cadastro cai direto numa questão curta, sem clique a mais', async () => {
   await cadastrar('Primeira');
@@ -163,6 +247,7 @@ await item('cadastro cai direto numa questão curta, sem clique a mais', async (
   igual(await hoje(), '0 de 5', 'ritmo do dia');
   igual(await p.avaliar('document.querySelector("#conferir").disabled'), true, 'Conferir só depois de marcar');
   certo(!(await p.avaliar('fetch("/api/painel").then(r => r.text())')).includes('"correta"'), 'painel sem gabarito');
+  igual(await p.avaliar('getComputedStyle(document.querySelector(".entrar-topo")).display'), 'none', 'link Entrar do topo some com a conta aberta');
 });
 await item('menu embaixo no celular e no cabeçalho no computador, com cinco destinos', async () => {
   igual(await p.avaliar('[...document.querySelectorAll("#menu a")].map(a => a.innerText.trim())'), ['Estudar', 'Progresso', 'Simulado', 'Nota', 'Conta'], 'destinos');
@@ -511,7 +596,7 @@ await item('tema: preferência guardada por conta, entra antes do primeiro quadr
   const {identifier} = await p.s('Page.addScriptToEvaluateOnNewDocument', {source: `(() => {
     const registrar = nome => { if (window[nome]) return; const raiz = document.documentElement; window[nome] = {tema: raiz.dataset.tema || null, fundo: raiz.isConnected ? getComputedStyle(raiz).backgroundColor : null}; };
     requestAnimationFrame(() => registrar('__primeiroQuadro'));
-    new MutationObserver(() => { const c = document.querySelector('#conteudo'); if (c && c.childElementCount) registrar('__primeiraTela'); }).observe(document, {childList: true, subtree: true});
+    new MutationObserver(() => { const c = document.querySelector('#conteudo'); if (c && [...c.children].some(x => !x.matches('.entrada[data-estatica]'))) registrar('__primeiraTela'); }).observe(document, {childList: true, subtree: true});
   })()`});
   try { await p.recarregar(); await estudoPronto(); } finally { await p.s('Page.removeScriptToEvaluateOnNewDocument', {identifier}); }
   igual(await p.avaliar('window.__primeiraTela'), {tema: 'noturno', fundo: PRETO}, 'primeira tela de dentro já no noturno');
@@ -520,7 +605,7 @@ await item('tema: preferência guardada por conta, entra antes do primeiro quadr
   await abrirConta(); await p.clicar('#sair'); await p.esperar('document.querySelector("#acesso")');
   igual(await temaNaPagina(), null, 'entrada sem tema'); igual(await p.avaliar('getComputedStyle(document.documentElement).colorScheme'), 'light', 'entrada clara');
   igual(await p.avaliar('getComputedStyle(document.querySelector(".faixa-papel")).backgroundColor'), BRANCO, 'faixa da entrada igual');
-  igual(await p.avaliar('document.querySelector("meta[name=theme-color]").content'), '#FBFBFA', 'theme-color da entrada');
+  igual(await p.avaliar('document.querySelector("meta[name=theme-color]").content'), '#FFFFFF', 'theme-color da entrada (o do index.html, branco pela identidade de 14/11)');
   await cadastrar('Terceira');
   igual(await p.avaliar('prefs.tema'), 'automatico', 'conta nova no padrão'); igual(await temaNaPagina(), 'diurno', 'conta nova no automático de dia');
   await abrirConta(); await p.clicar('#sair'); await p.esperar('document.querySelector("#acesso")');
@@ -656,6 +741,27 @@ await item('capturas da conta e da questão corrigida em diurno e noturno, em 39
 });
 const errosLocais = p.erros.filter(e => !/favicon|401 \(Unauthorized\)|ERR_INTERNET_DISCONNECTED|ERR_BLOCKED_BY_CLIENT|Failed to fetch/.test(e));
 await item('nenhum erro de JavaScript nem recurso bloqueado pela política de conteúdo', async () => { igual(errosLocais, [], 'erros'); });
+// Depois da conta de erros: os pedidos recusados de propósito abaixo deixam aviso de 404 no console.
+await item('identidade de 14/11: logo da pata no topo, fontes servidas pelo site e variáveis de cor', async () => {
+  const m = await p.avaliar(`(async () => {
+    const svg = document.querySelector('.topo .simbolo svg'); const caminho = svg && svg.querySelector('path');
+    const fonte = await fetch('/fontes/pu-texto.woff2');
+    const recusas = await Promise.all(['/fontes/nao-existe.woff2', '/fontes/..%2Fservidor.py', '/fontes/sub/pu-texto.woff2', '/ilustracoes/x.js', '/servidor.py', '/fontes/pu-texto.svg', '/ilustracoes/pu-texto.woff2'].map(async u => (await fetch(u)).status));
+    await document.fonts.load('16px "Atkinson Hyperlegible Next"');
+    const raiz = getComputedStyle(document.documentElement);
+    return {logo: Boolean(caminho) && caminho.getAttribute('fill-rule') === 'evenodd' && caminho.getAttribute('d').startsWith('M256 0a256'),
+      largura: Math.round(svg.getBoundingClientRect().width), cor: getComputedStyle(svg).color,
+      fonte: [fonte.status, fonte.headers.get('content-type')], recusas,
+      carregada: [...document.fonts].some(f => f.family.replace(/"/g, '') === 'Atkinson Hyperlegible Next' && f.status === 'loaded'),
+      variaveis: ['--marca', '--azul-mar', '--roxo-ipe-noite', '--fonte-texto'].map(v => raiz.getPropertyValue(v).trim().split(',')[0])};
+  })()`);
+  igual(m.logo, true, 'círculo com a pata vazada no topo'); igual(m.largura, 32, 'símbolo de 32 px'); igual(m.cor, 'rgb(0, 0, 0)', 'círculo preto no topo');
+  igual(m.fonte, [200, 'font/woff2'], 'fonte servida pelo próprio site'); igual(m.recusas, [404, 404, 404, 404, 404, 404, 404], 'só nomes simples, woff2 em fontes/ e webp ou png em ilustracoes/');
+  const expressoes = ['app/servidor.py', 'ambiente/servidor.py', 'gerenciador/servidor.py'].map(f => (fs.readFileSync(path.join(RAIZ, f), 'utf8').match(/r'(\/\(\?:fontes\/[^']+)'/) || [])[1]);
+  certo(expressoes[0] && expressoes.every(e => e === expressoes[0]), 'mesma expressão de arquivos estáticos nos três servidores: ' + JSON.stringify(expressoes));
+  igual(m.carregada, true, 'fonte carrega com a política de conteúdo');
+  igual(m.variaveis, ['#000000', '#2747F5', '#A78BFF', '"Atkinson Hyperlegible Next"'], 'variáveis de cor e de fonte da direção nova');
+});
 
 // ---------- Entrada pública: GitHub Pages + intermediário (simulado dentro do Chrome) ----------
 await p.fechar();
@@ -708,6 +814,21 @@ await item('entrada pública: recarregar mantém a sessão e abre na questão', 
   igual(await p.avaliar('localStorage.getItem("pu.sessao.v1")'), null, 'sessão apagada ao sair');
 });
 await item('entrada pública: só operações aceitas pelo intermediário e respostas abaixo de 100 KB', async () => { igual(recusados, [], 'operações recusadas'); igual(maiores, [], 'respostas grandes'); });
+await item('entrada pública: logo da pata no topo, ícones do manifesto e as quatro fontes servidas pelo próprio site', async () => {
+  // A política de conteúdo da entrada só deixa o navegador conversar com o intermediário: manifesto e ícones são conferidos daqui, como o GitHub Pages os serve.
+  const pedir = async u => (await fetch(new URL(u, URL_PUBLICA + '/'))).status;
+  const manifesto = await (await fetch(URL_PUBLICA + '/manifest.webmanifest')).json();
+  igual(await Promise.all(manifesto.icons.map(i => pedir(i.src))), [200, 200, 200, 200], 'ícones do manifesto');
+  igual(manifesto.icons.filter(i => i.purpose === 'maskable').length, 1, 'um ícone com máscara');
+  const m = await p.avaliar(`(async () => {
+    for (const f of ['16px "Atkinson Hyperlegible Next"', 'italic 16px "Atkinson Hyperlegible Next"', '700 40px "Bricolage Grotesque"', '20px "Newsreader"', '16px "JetBrains Mono"']) await document.fonts.load(f);
+    return {favicon: document.querySelector('link[rel=icon]').getAttribute('href'), apple: document.querySelector('link[rel=apple-touch-icon]').getAttribute('href'),
+      carregadas: [...new Set([...document.fonts].filter(f => f.status === 'loaded').map(f => f.family.replace(/"/g, '')))].sort(),
+      logo: Boolean(document.querySelector('.topo .simbolo svg path[fill-rule=evenodd]'))};
+  })()`);
+  igual(m.logo, true, 'logo da pata no topo'); igual([await pedir(m.favicon), await pedir(m.apple)], [200, 200], 'favicon e ícone da tela inicial');
+  igual(m.carregadas, ['Atkinson Hyperlegible Next', 'Bricolage Grotesque', 'JetBrains Mono', 'Newsreader'], 'fontes carregadas');
+});
 await item('entrada pública sem erro de JavaScript', async () => { igual(p.erros.filter(e => !/favicon/.test(e)), [], 'erros'); });
 
 await chrome.fechar(); servidor.kill(); estatico.close(); fs.rmSync(pasta, {recursive: true, force: true});
