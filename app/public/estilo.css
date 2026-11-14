@@ -1,6 +1,13 @@
 /* Pé na Universidade (PU): minimalismo utilitário e editorial, celular primeiro.
    Dominique-Oliveira-Claude🤖🧡, 12/11/2026. Identidade em "Identidade visual do site VpT" (cofre Ginga Mídia).
    Duas famílias: sem serifa do sistema no corpo e serifada nos títulos. Pastéis só com sentido: verde certo, vermelho errado, amarelo marcado, azul dica. */
+/* Fontes da direção de 14/11/2026, todas OFL 1.1 e servidas pelo próprio site (fontes/LICENCAS-OFL.txt).
+   Só baixam quando algum elemento usa a família: até as frentes seguintes aplicarem, nada muda na tela. */
+@font-face { font-family: "Bricolage Grotesque"; src: url("fontes/pu-cartaz.woff2") format("woff2"); font-weight: 600 800; font-style: normal; font-display: swap; }
+@font-face { font-family: "Newsreader"; src: url("fontes/pu-titulos.woff2") format("woff2"); font-weight: 400 600; font-style: normal; font-display: swap; }
+@font-face { font-family: "Atkinson Hyperlegible Next"; src: url("fontes/pu-texto.woff2") format("woff2"); font-weight: 400 700; font-style: normal; font-display: swap; }
+@font-face { font-family: "Atkinson Hyperlegible Next"; src: url("fontes/pu-texto-italico.woff2") format("woff2"); font-weight: 400 700; font-style: italic; font-display: swap; }
+@font-face { font-family: "JetBrains Mono"; src: url("fontes/pu-numeros.woff2") format("woff2"); font-weight: 500 700; font-style: normal; font-display: swap; }
 :root {
   --fundo: #FFFFFF; --painel: #FFFFFF; --texto: #2F3437; --secundario: #6B6A67;
   --linha: #EAEAEA; --suave: #F7F6F3; --destaque: #111111; --foco: #346538;
@@ -20,6 +27,32 @@
   --mola: cubic-bezier(0.16, 1, 0.3, 1);
   /* Troca de cor de fundo e de borda no passar do ponteiro. */
   --troca: cubic-bezier(0.216, 0.62, 0.356, 1);
+  /* ---- Direção de 14/11/2026 (nota "Identidade visual do site VpT", seção de 14/11). Variáveis novas; as antigas acima continuam valendo até as frentes trocarem. ---- */
+  /* Paleta: neutros */
+  --papel: #FFFFFF; --areia: #F7F6F3; --tinta: #000000; --grafite: #2F3437; --cinza-texto: #6B6A67;
+  /* Paleta: decoração (nunca em acerto, erro nem dentro da folha da questão) */
+  --azul-mar: #2747F5; --laranja-boia: #FF6A2B; --amarelo-sol: #FFC93C; --rosa-goiaba: #FF6F9F; --roxo-ipe: #7A4DF0;
+  --azul-mar-claro: #E3E9FF; --laranja-claro: #FFE9DE; --amarelo-claro: #FFF3CC; --rosa-claro: #FFE5EE; --roxo-claro: #EEE7FF;
+  /* Paleta: decoração no tema noturno */
+  --azul-mar-noite: #6E86FF; --laranja-boia-noite: #FF8A52; --amarelo-sol-noite: #FFD45C; --rosa-goiaba-noite: #FF8DB4; --roxo-ipe-noite: #A78BFF;
+  --azul-mar-escuro: #101A4D; --laranja-escuro: #3D1A08; --amarelo-escuro: #3A2C00; --rosa-escuro: #3D0F22; --roxo-escuro: #221448;
+  /* Papéis no tema diurno (fundo branco). O tema noturno troca cada --cor-* pela --noite-* de mesmo nome. */
+  --cor-fundo: #FFFFFF; --cor-superficie: #FFFFFF; --cor-faixa: #F7F6F3; --cor-texto: #2F3437; --cor-texto-secundario: #6B6A67;
+  --cor-fio: #858480; --cor-linha: #EAEAEA; --cor-marca: #000000; --cor-titulo-cartaz: #000000;
+  --cor-destaque: #111111; --cor-sobre-destaque: #FFFFFF; --cor-foco: #2747F5;
+  --cor-acerto: #00695F; --cor-acerto-fundo: #D2EFEA; --cor-erro: #B3261E; --cor-erro-fundo: #FFF0E8;
+  --cor-marcado: #8A5A00; --cor-marcado-fundo: #FBF3DB; --cor-dica: #1F5FA0; --cor-dica-fundo: #E1F3FE;
+  /* Papéis no tema noturno (fundo preto) */
+  --noite-fundo: #000000; --noite-superficie: #141414; --noite-faixa: #1C1C1A; --noite-texto: #F2F0EB; --noite-texto-secundario: #A6A49F;
+  --noite-fio: #7C7B77; --noite-linha: #2B2B29; --noite-marca: #F2F0EB; --noite-titulo-cartaz: #F2F0EB;
+  --noite-destaque: #F2F0EB; --noite-sobre-destaque: #000000; --noite-foco: #8FA2FF;
+  --noite-acerto: #3CCFC0; --noite-acerto-fundo: #062A28; --noite-erro: #FF7B72; --noite-erro-fundo: #3D1408;
+  --noite-marcado: #F2C04B; --noite-marcado-fundo: #2E2300; --noite-dica: #7CC0F5; --noite-dica-fundo: #0B2236;
+  /* Tipografia */
+  --fonte-cartaz: "Bricolage Grotesque", "Arial Narrow", "Helvetica Neue", Arial, sans-serif;
+  --fonte-titulos: "Newsreader", "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif;
+  --fonte-texto: "Atkinson Hyperlegible Next", "SF Pro Display", "Helvetica Neue", Arial, sans-serif;
+  --fonte-numeros: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
   font-family: "SF Pro Display", "Helvetica Neue", Arial, sans-serif;
   font-size: 100%; line-height: 1.6; color: var(--texto); background: var(--fundo); color-scheme: light;
   -webkit-font-smoothing: antialiased; -webkit-text-size-adjust: 100%;
@@ -81,8 +114,9 @@ html[data-entrada=ponteiro] button:not(:disabled):active, .botao:active { transf
   background: #FBFBFA; border-bottom: 1px solid var(--linha);
 }
 .marca { display: inline-flex; align-items: center; gap: 10px; min-height: 2.75rem; text-decoration: none; }
-.simbolo { display: grid; place-items: center; width: 32px; height: 32px; border-radius: 8px; color: white; background: var(--texto); flex-shrink: 0; }
-.simbolo svg { width: 20px; height: 20px; }
+/* Símbolo: o logo da pata (círculo na cor da marca, pata vazada mostrando o fundo do topo). */
+.simbolo { display: grid; place-items: center; width: 32px; height: 32px; border-radius: 50%; color: var(--cor-marca); flex-shrink: 0; }
+.simbolo svg { width: 32px; height: 32px; display: block; }
 .marca strong { font-size: 1rem; letter-spacing: -.02em; font-weight: 650; }
 .marca strong span { color: var(--secundario); font-weight: 400; }
 .menu {

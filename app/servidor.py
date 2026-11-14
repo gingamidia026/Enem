@@ -37,6 +37,9 @@ LIMITE_ORIGEM = max(30, int(os.environ.get('LIMITE_ENTRADAS_ORIGEM', '30')))
 if PRODUCAO and (not SEGURO or PERFIL_TESTE or not ORIGEM.startswith('https://')):
     raise RuntimeError('Produção exige HTTPS, cookie seguro e perfil de teste desligado.')
 PUBLICO = Path(__file__).parent / 'public'
+# Fontes e ilustrações da identidade: nome simples dentro de fontes/ ou ilustracoes/, sem subpasta e sem "..".
+RECURSO_ESTATICO = re.compile(r'/(fontes|ilustracoes)/[a-z0-9][a-z0-9-]{0,60}\.(woff2|svg|webp|png)')
+TIPOS_ESTATICOS = {'woff2': 'font/woff2', 'svg': 'image/svg+xml', 'webp': 'image/webp', 'png': 'image/png'}
 INDICE = indice(QUESTOES)
 MAPA = {q['id']: q for q in QUESTOES}
 
@@ -235,6 +238,8 @@ class API(BaseHTTPRequestHandler):
             arquivo = PUBLICO / {'/': 'index.html', '/app.js': 'app.js', '/simulador.js': 'simulador.js', '/estilo.css': 'estilo.css', '/textura.svg': 'textura.svg'}[caminho]
             tipo = {'/': 'text/html; charset=utf-8', '/app.js': 'text/javascript; charset=utf-8', '/simulador.js': 'text/javascript; charset=utf-8', '/estilo.css': 'text/css; charset=utf-8', '/textura.svg': 'image/svg+xml'}[caminho]
             return self.enviar(200, arquivo.read_bytes(), tipo)
+        if metodo == 'GET' and RECURSO_ESTATICO.fullmatch(caminho) and (PUBLICO / caminho[1:]).is_file():
+            return self.enviar(200, (PUBLICO / caminho[1:]).read_bytes(), TIPOS_ESTATICOS[caminho.rsplit('.', 1)[1]])
         if metodo == 'GET' and caminho == '/api/saude':
             return self.enviar(200, {'estado': 'ok'})
         if metodo == 'GET' and caminho == '/api/configuracao':
@@ -316,7 +321,7 @@ class API(BaseHTTPRequestHandler):
             conta = self.conta(con)
             if INDIVIDUAIS and metodo=='GET' and caminho.startswith('/site/'):
                 recurso=caminho[len('/site'):]
-                if recurso not in ['/','/app.js','/simulador.js','/estilo.css','/textura.svg']:raise Erro(404,'Página não encontrada.')
+                if recurso not in ['/','/app.js','/simulador.js','/estilo.css','/textura.svg'] and not RECURSO_ESTATICO.fullmatch(recurso):raise Erro(404,'Página não encontrada.')
                 resposta=ambiente(conta['id'],'site',caminho=recurso)
                 return self.enviar(200,base64.b64decode(resposta['corpo']),resposta['tipo'])
             if caminho == '/api/dispositivos':

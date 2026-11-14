@@ -55,8 +55,8 @@ const estatico = http.createServer((pedido, resposta) => {
   const caminho = decodeURIComponent(new URL(pedido.url, URL_PUBLICA).pathname);
   if (caminho === '/configuracao-publica.js') { resposta.writeHead(200, {'Content-Type': 'text/javascript'}); return resposta.end(`window.ENEM_PUBLICO = Object.freeze({habilitado: true, intermediario: '${INTERMEDIARIO}'});`); }
   const arquivo = path.join(RAIZ, caminho === '/' ? 'index.html' : caminho);
-  if (!arquivo.startsWith(RAIZ) || !/^\/(index\.html)?$|^\/app\/public\/[a-z.]+$|^\/manifest\.webmanifest$|^\/icones\/[a-z0-9.-]+$/.test(caminho) || !fs.existsSync(arquivo)) { resposta.writeHead(404); return resposta.end(); }
-  resposta.writeHead(200, {'Content-Type': {'.html': 'text/html; charset=utf-8', '.js': 'text/javascript', '.css': 'text/css', '.svg': 'image/svg+xml', '.png': 'image/png', '.webmanifest': 'application/manifest+json'}[path.extname(arquivo)]});
+  if (!arquivo.startsWith(RAIZ) || !/^\/(index\.html)?$|^\/app\/public\/(?:(?:fontes|ilustracoes)\/)?[a-z0-9.-]+$|^\/manifest\.webmanifest$|^\/icones\/[a-z0-9.-]+$/.test(caminho) || !fs.existsSync(arquivo)) { resposta.writeHead(404); return resposta.end(); }
+  resposta.writeHead(200, {'Content-Type': {'.html': 'text/html; charset=utf-8', '.js': 'text/javascript', '.css': 'text/css', '.svg': 'image/svg+xml', '.png': 'image/png', '.webp': 'image/webp', '.woff2': 'font/woff2', '.webmanifest': 'application/manifest+json'}[path.extname(arquivo)]});
   // A política de conteúdo da entrada pública aponta para o intermediário real; no teste, para o simulado.
   resposta.end(caminho === '/' ? fs.readFileSync(arquivo, 'utf8').replace('https://enem-ginga-conexao.sabrinaconradoadv.chatgpt.site', INTERMEDIARIO) : fs.readFileSync(arquivo));
 }).listen(portaPublica, '127.0.0.1');
@@ -426,6 +426,25 @@ await item('painel pedido antes de uma resposta não sobrescreve o resultado del
 });
 const errosLocais = p.erros.filter(e => !/favicon|401 \(Unauthorized\)|ERR_INTERNET_DISCONNECTED|ERR_BLOCKED_BY_CLIENT|Failed to fetch/.test(e));
 await item('nenhum erro de JavaScript nem recurso bloqueado pela política de conteúdo', async () => { igual(errosLocais, [], 'erros'); });
+// Depois da conta de erros: os pedidos recusados de propósito abaixo deixam aviso de 404 no console.
+await item('identidade de 14/11: logo da pata no topo, fontes servidas pelo site e variáveis de cor', async () => {
+  const m = await p.avaliar(`(async () => {
+    const svg = document.querySelector('.topo .simbolo svg'); const caminho = svg && svg.querySelector('path');
+    const fonte = await fetch('/fontes/pu-texto.woff2');
+    const recusas = await Promise.all(['/fontes/nao-existe.woff2', '/fontes/..%2Fservidor.py', '/fontes/sub/pu-texto.woff2', '/ilustracoes/x.js', '/servidor.py'].map(async u => (await fetch(u)).status));
+    await document.fonts.load('16px "Atkinson Hyperlegible Next"');
+    const raiz = getComputedStyle(document.documentElement);
+    return {logo: Boolean(caminho) && caminho.getAttribute('fill-rule') === 'evenodd' && caminho.getAttribute('d').startsWith('M256 0a256'),
+      largura: Math.round(svg.getBoundingClientRect().width), cor: getComputedStyle(svg).color,
+      fonte: [fonte.status, fonte.headers.get('content-type')], recusas,
+      carregada: [...document.fonts].some(f => f.family.replace(/"/g, '') === 'Atkinson Hyperlegible Next' && f.status === 'loaded'),
+      variaveis: ['--cor-acerto', '--cor-erro', '--noite-fundo', '--cor-marca'].map(v => raiz.getPropertyValue(v).trim())};
+  })()`);
+  igual(m.logo, true, 'círculo com a pata vazada no topo'); igual(m.largura, 32, 'símbolo de 32 px'); igual(m.cor, 'rgb(0, 0, 0)', 'círculo preto no topo');
+  igual(m.fonte, [200, 'font/woff2'], 'fonte servida pelo próprio site'); igual(m.recusas, [404, 404, 404, 404, 404], 'só nomes simples em fontes/ e ilustracoes/');
+  igual(m.carregada, true, 'fonte carrega com a política de conteúdo');
+  igual(m.variaveis, ['#00695F', '#B3261E', '#000000', '#000000'], 'variáveis de cor da direção nova');
+});
 
 // ---------- Entrada pública: GitHub Pages + intermediário (simulado dentro do Chrome) ----------
 await p.fechar();
@@ -477,6 +496,21 @@ await item('entrada pública: recarregar mantém a sessão e abre na questão', 
   igual(await p.avaliar('localStorage.getItem("pu.sessao.v1")'), null, 'sessão apagada ao sair');
 });
 await item('entrada pública: só operações aceitas pelo intermediário e respostas abaixo de 100 KB', async () => { igual(recusados, [], 'operações recusadas'); igual(maiores, [], 'respostas grandes'); });
+await item('entrada pública: logo da pata no topo, ícones do manifesto e as quatro fontes servidas pelo próprio site', async () => {
+  // A política de conteúdo da entrada só deixa o navegador conversar com o intermediário: manifesto e ícones são conferidos daqui, como o GitHub Pages os serve.
+  const pedir = async u => (await fetch(new URL(u, URL_PUBLICA + '/'))).status;
+  const manifesto = await (await fetch(URL_PUBLICA + '/manifest.webmanifest')).json();
+  igual(await Promise.all(manifesto.icons.map(i => pedir(i.src))), [200, 200, 200, 200], 'ícones do manifesto');
+  igual(manifesto.icons.filter(i => i.purpose === 'maskable').length, 1, 'um ícone com máscara');
+  const m = await p.avaliar(`(async () => {
+    for (const f of ['16px "Atkinson Hyperlegible Next"', 'italic 16px "Atkinson Hyperlegible Next"', '700 40px "Bricolage Grotesque"', '20px "Newsreader"', '16px "JetBrains Mono"']) await document.fonts.load(f);
+    return {favicon: document.querySelector('link[rel=icon]').getAttribute('href'), apple: document.querySelector('link[rel=apple-touch-icon]').getAttribute('href'),
+      carregadas: [...new Set([...document.fonts].filter(f => f.status === 'loaded').map(f => f.family.replace(/"/g, '')))].sort(),
+      logo: Boolean(document.querySelector('.topo .simbolo svg path[fill-rule=evenodd]'))};
+  })()`);
+  igual(m.logo, true, 'logo da pata no topo'); igual([await pedir(m.favicon), await pedir(m.apple)], [200, 200], 'favicon e ícone da tela inicial');
+  igual(m.carregadas, ['Atkinson Hyperlegible Next', 'Bricolage Grotesque', 'JetBrains Mono', 'Newsreader'], 'fontes carregadas');
+});
 await item('entrada pública sem erro de JavaScript', async () => { igual(p.erros.filter(e => !/favicon/.test(e)), [], 'erros'); });
 
 await chrome.fechar(); servidor.kill(); estatico.close(); fs.rmSync(pasta, {recursive: true, force: true});
