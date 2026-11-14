@@ -228,6 +228,14 @@ await item('entrada de 14/11: ?criar-conta, #entrar e o link Entrar do topo leva
   await p.clicar('#trocar'); await p.esperar('document.querySelector("#nome")');
   igual(await p.avaliar('[...document.querySelectorAll("#acesso input")].map(i => i.name + ":" + i.type + ":" + i.autocomplete + ":" + i.minLength)'), ['nome:text:name:2', 'email:email:username:-1', 'senha:password:new-password:12'], 'campos do cadastro iguais');
   await p.clicar('#trocar'); await p.esperar('!document.querySelector("#nome")');
+  await p.preencher('#email', 'digitado@example.com'); await p.clicar('#trocar'); await p.esperar('document.querySelector("#nome")');
+  igual(await p.avaliar('document.querySelector("#email").value'), 'digitado@example.com', 'trocar de modo mantém o e-mail digitado');
+  await p.clicar('#trocar'); await p.esperar('!document.querySelector("#nome")');
+  // Faixa que corre com botão de pausa (no celular não há ponteiro para pará-la).
+  await p.clicar('.pausar-faixa');
+  igual(await p.avaliar('[getComputedStyle(document.querySelector(".trilho")).animationPlayState, document.querySelector(".pausar-faixa").getAttribute("aria-pressed")]'), ['paused', 'true'], 'faixa pausada pelo botão');
+  await p.clicar('.pausar-faixa'); await p.avaliar('document.activeElement.blur()');
+  igual(await p.avaliar('getComputedStyle(document.querySelector(".trilho")).animationPlayState'), 'running', 'faixa segue de novo');
   // Foco visível no link do topo, com contraste de pelo menos 3:1 sobre o branco.
   await p.tecla('x'); await p.avaliar('document.querySelector(".entrar-topo").focus()');
   igual(await p.avaliar('[getComputedStyle(document.querySelector(".entrar-topo")).outlineStyle, getComputedStyle(document.querySelector(".entrar-topo")).outlineColor]'), ['solid', 'rgb(39, 71, 245)'], 'foco azul-mar no link do topo');

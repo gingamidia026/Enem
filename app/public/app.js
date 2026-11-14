@@ -500,10 +500,11 @@ function provasHtml() {
 }
 // Faixa que corre: frases que a entrada já diz, em caixa alta com até três palavras (identidade de 14/11/2026).
 // A cópia fica fora da leitura de tela; parada com movimento reduzido.
-const FRASES_FAIXA = ['Questões oficiais', 'Uma por vez', 'Revisão espaçada', 'Meta pequena', 'Simulado curto', 'Gratuito'];
+const FRASES_FAIXA = ['Questões oficiais', 'Uma por vez', 'Revisão espaçada', 'Meta pequena', 'Simulado curto', 'Progresso por matéria'];
 function faixaQueCorre() {
   const lista = copia => `<ul class="frases"${copia ? ' aria-hidden="true"' : ' aria-label="O que o PU oferece"'}>${[...FRASES_FAIXA, ...FRASES_FAIXA].map(f => `<li>${f}</li>`).join('')}</ul>`;
-  return `<div class="faixa-corre"><div class="trilho">${lista(false)}${lista(true)}</div></div>`;
+  // Botão de pausa: no celular não há ponteiro para parar a faixa (WCAG 2.2.2).
+  return `<div class="faixa-corre"><div class="trilho">${lista(false)}${lista(true)}</div><button type="button" class="discreto pausar-faixa" aria-pressed="false">Pausar</button></div>`;
 }
 // Cerca de 40 px por segundo, qualquer que seja a largura das frases.
 function ajustarFaixa() { const trilho = $('.trilho'); if (trilho) trilho.style.animationDuration = `${Math.max(20, trilho.firstElementChild.offsetWidth / 40).toFixed(1)}s`; }
@@ -523,7 +524,9 @@ function verEntrada({rolar = false} = {}) {
     preencherLugar('faixa-que-corre', faixaQueCorre(), true);
     preencherLugar('provas', provasHtml());
     desenharDemonstracao();
-    ajustarFaixa();
+    ajustarFaixa(); document.fonts?.ready.then(ajustarFaixa);
+    const pausar = $('.pausar-faixa');
+    if (pausar) pausar.onclick = () => { const parada = pausar.getAttribute('aria-pressed') !== 'true'; pausar.setAttribute('aria-pressed', String(parada)); pausar.textContent = parada ? 'Seguir' : 'Pausar'; $('.faixa-corre').classList.toggle('parada', parada); };
   }
   desenharFormulario();
   if (rolar) irAoFormulario();
@@ -540,12 +543,17 @@ function desenharDemonstracao() {
     const escolhida = Number(evento.target.value); const campo = $('#demonstracao');
     $$('.alternativa', campo).forEach((alternativa, i) => { if (i === q.correta) alternativa.dataset.correcao = 'correta'; else if (i === escolhida) alternativa.dataset.correcao = 'errada'; });
     campo.disabled = true;
-    $('#retorno-demonstracao').innerHTML = `<p class="${escolhida === q.correta ? 'acerto' : 'engano'}"><strong>${escolhida === q.correta ? 'Certa!' : `Não foi essa. A certa é a ${letra(q.correta)}.`}</strong> No PU, uma questão errada volta na revisão no dia seguinte, até você acertar com segurança.</p><button type="button" id="quero-conta">Criar minha conta</button>`;
+    const certa = escolhida === q.correta;
+    $('#retorno-demonstracao').innerHTML = `<p class="${certa ? 'acerto' : 'engano'}"><strong>${certa ? 'Certa!' : `Não foi essa. A certa é a ${letra(q.correta)}.`}</strong> ${certa ? 'No PU, cada resposta entra no seu progresso por matéria e assunto.' : 'No PU, uma questão errada volta na revisão no dia seguinte, até você acertar com segurança.'}</p><button type="button" id="quero-conta">Criar minha conta</button>`;
+    // O rádio com foco ficou desativado: o foco vai para o retorno, que o leitor de tela lê em seguida.
+    $('#retorno-demonstracao').setAttribute('tabindex', '-1'); $('#retorno-demonstracao').focus({preventScroll: true});
     $('#quero-conta').onclick = () => { cadastro = true; desenharFormulario(); irAoFormulario(); };
   };
 }
 function desenharFormulario() {
   const indisponivel = publico && !conexao.habilitado;
+  // Trocar entre entrar e criar conta não apaga o que já foi digitado.
+  const digitado = {nome: $('#nome')?.value || '', email: $('#email')?.value || ''};
   if (!preencherLugar('formulario', `<h3 id="titulo-acesso">${cadastro ? 'Crie sua conta' : 'Entre para estudar'}</h3>
 ${indisponivel ? '<p class="nota" role="status">O acesso público está em configuração. Ainda não é possível entrar.</p>' : ''}
 <form id="acesso" aria-labelledby="titulo-acesso">
@@ -557,6 +565,7 @@ ${cadastro ? '<label for="nome">Como você se chama?</label><input id="nome" nam
 <p id="erro-acesso" class="erro-campo" role="alert"></p>
 </form>
 <button class="discreto troca" id="trocar" type="button">${cadastro ? 'Já tenho uma conta' : 'Quero criar uma conta'}</button>`)) return;
+  for (const [campo, valor] of Object.entries(digitado)) { const e = $('#' + campo); if (e && valor) e.value = valor; }
   $('#trocar').onclick = () => { cadastro = !cadastro; desenharFormulario(); $('#acesso input').focus(); };
   $('#acesso').onsubmit = async evento => {
     evento.preventDefault();
@@ -1069,8 +1078,8 @@ function navegar() {
   let destino = APELIDOS[location.hash] ?? location.hash;
   if (!ROTAS[destino]) destino = '#estudar';
   marcarMenu(destino);
-  if (destino === '#privacidade') { verPrivacidade(); return subir(); }
   const pedido = pedidoDeCadastro; pedidoDeCadastro = false;
+  if (destino === '#privacidade') { verPrivacidade(); return subir(); }
   if (!painel) {
     // #entrar e #criar-conta levam ao formulário; ?criar-conta abre no cadastro.
     if (location.hash === '#criar-conta' || (pedido && location.hash !== '#entrar')) cadastro = true; else if (location.hash === '#entrar') cadastro = false;

@@ -310,14 +310,14 @@ body.sem-sessao:has(#conteudo > .entrada:not([data-estatica])) .entrar-topo {
 }
 @media (hover:hover) and (pointer:fine) { body.sem-sessao .entrar-topo:hover { background: var(--amarelo-claro); } }
 .entrada :is(h1, h2, h3) { font-family: var(--fonte-cartaz); color: var(--tinta); letter-spacing: -.02em; text-wrap: balance; }
-.entrada h2 { font-weight: 800; font-size: clamp(2.25rem, 8vw, 4rem); line-height: .95; margin: 0 0 1.5rem; }
+.entrada h2 { font-weight: 800; font-size: clamp(2.125rem, 7vw, 3.25rem); line-height: .95; margin: 0 0 1.5rem; }
 .entrada h3 { font-weight: 700; font-size: clamp(1.375rem, 2vw, 1.625rem); line-height: 1.15; margin: 0 0 .5rem; letter-spacing: -.01em; }
 
 /* Faixas */
 .faixa { padding: 3rem max(1rem,env(safe-area-inset-right)) 3.25rem max(1rem,env(safe-area-inset-left)); }
 .faixa > section { max-width: 72rem; margin-inline: auto; }
 .faixa-papel { background: #FFFFFF; }
-.faixa-topo { padding-top: 2rem; }
+.faixa-topo { padding-block: 1.75rem 2rem; }
 .faixa-areia { background: var(--suave); }
 .faixa-boia { background: var(--laranja-claro); }
 .faixa-mar-claro { background: var(--azul-mar-claro); }
@@ -335,12 +335,14 @@ body.sem-sessao:has(#conteudo > .entrada:not([data-estatica])) .entrar-topo {
 .onda-linha { width: 9rem; height: 12px; margin-bottom: 1.5rem; background: var(--azul-mar); -webkit-mask: var(--forma-linha) 0 0 / 48px 12px repeat-x; mask: var(--forma-linha) 0 0 / 48px 12px repeat-x; }
 
 /* Topo: logo no cabeçalho, título de cartaz, apoio, tarja e a cena do mar desenhada em código. */
-.apresentacao { display: grid; gap: 1.25rem; align-items: center; }
+.apresentacao { display: grid; gap: 1.5rem; align-items: center; }
 .apresentacao h1 { font-weight: 800; font-size: clamp(3rem, 12vw, 7rem); line-height: .92; margin: 0 0 1.25rem; max-width: 12ch; }
 .apresentacao .lide { font-size: 1.1875rem; line-height: 1.5; max-width: 34rem; margin: 0 0 1.25rem; }
-.tarja { display: inline-block; margin: 0 0 .25rem .25rem; padding: .25rem .875rem; border: 1px solid var(--tinta); background: var(--amarelo-sol); color: #000000;
+.topo-acoes { display: flex; flex-wrap: wrap; align-items: center; gap: 1rem 1.5rem; }
+.topo-acoes .botao { min-height: 3.25rem; padding-inline: 1.5rem; font-weight: 700; }
+.tarja { display: inline-block; margin: 0; padding: .25rem .875rem; border: 1px solid var(--tinta); background: var(--amarelo-sol); color: #000000;
   font-family: var(--fonte-cartaz); font-weight: 800; font-size: 1.25rem; letter-spacing: .04em; text-transform: uppercase; rotate: -3deg; }
-.cena-mar { display: block; width: 100%; max-width: 19rem; height: auto; justify-self: center; overflow: visible; }
+.cena-mar { display: block; width: 100%; max-width: 15rem; height: auto; justify-self: center; overflow: visible; }
 .cena-mar * { vector-effect: non-scaling-stroke; stroke-linejoin: round; stroke-linecap: round; }
 .c-mar-claro { fill: var(--azul-mar-claro); }
 .c-sol { fill: var(--amarelo-sol); }
@@ -380,7 +382,10 @@ body.sem-sessao:has(#conteudo > .entrada:not([data-estatica])) .entrar-topo {
 .selo-novo { width: 3.5rem; height: 3.5rem; overflow: visible; }
 
 /* Faixa que corre: uma tira só, em amarelo-sol com texto preto (13,67:1); laço por CSS, pausa no ponteiro e no foco, parada com movimento reduzido. */
-.faixa-corre { overflow: clip; background: var(--amarelo-sol); border-block: 1px solid var(--tinta); }
+.faixa-corre { position: relative; overflow: clip; background: var(--amarelo-sol); border-block: 1px solid var(--tinta); }
+.faixa-corre.parada .trilho { animation-play-state: paused; }
+/* Pausa no canto direito, por cima das frases (a cópia que passa por baixo é só repetição). */
+.entrada .pausar-faixa { position: absolute; top: 50%; right: max(.5rem, env(safe-area-inset-right)); translate: 0 -50%; min-height: 2.75rem; padding: .25rem .875rem; border: 1px solid var(--tinta); border-radius: 8px; background: #FFFFFF; color: var(--tinta); font-weight: 700; font-size: .9375rem; box-shadow: 0 0 0 .5rem var(--amarelo-sol); }
 .trilho { display: flex; width: max-content; animation: correr-faixa 60s linear infinite; }
 .faixa-corre:hover .trilho, .faixa-corre:focus-within .trilho { animation-play-state: paused; }
 @keyframes correr-faixa { to { transform: translateX(-50%); } }
@@ -408,6 +413,11 @@ body.sem-sessao:has(#conteudo > .entrada:not([data-estatica])) .entrar-topo {
 .lista-ganhos { list-style: none; margin: 0; padding: 0; display: grid; column-gap: 2rem; }
 .lista-ganhos li { padding: 1.25rem 0 1.5rem; border-top: 1px solid var(--tinta); }
 .lista-ganhos p { margin: 0; }
+/* Os três principais vêm primeiro, com selo e título maior; os outros seis, mais compactos. */
+.lista-ganhos .principal { padding-top: 1.5rem; }
+.entrada .lista-ganhos .principal h3 { font-size: clamp(1.625rem, 3vw, 2.125rem); margin-top: .75rem; }
+.lista-ganhos .principal .selo-novo { display: block; }
+.lista-ganhos li:not(.principal) p { font-size: 1rem; }
 
 /* Provas no PU: a lista sai de PROVAS_NO_AR no app.js; o total vai num número de cartaz sobre o sol. */
 .provas { display: grid; gap: 0 3rem; }
