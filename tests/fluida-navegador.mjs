@@ -153,9 +153,85 @@ await item('entrada nova: faixa que corre, selos fora da leitura e botão princi
     await dormir(100);
     igual(await p.avaliar('getComputedStyle(document.querySelector(".trilho")).animationName'), 'none', 'faixa parada com movimento reduzido');
     igual(await p.avaliar('getComputedStyle(document.querySelector(".trilho")).transform'), 'none', 'faixa no início');
-    igual(await p.avaliar('[...document.querySelectorAll(".entrada > *")].map(e => getComputedStyle(e).animationName)'), ['none', 'none', 'none', 'none'], 'entrada sem animação');
+    igual(await p.avaliar('[...new Set([...document.querySelectorAll(".entrada > *, .entrada *")].map(e => getComputedStyle(e).animationName))]'), ['none'], 'entrada sem animação, inclusive a boia e o livro da cena');
   } finally { await p.s('Emulation.setEmulatedMedia', {features: []}); }
   await p.tamanho(390, 844); await dormir(100);
+});
+// Página de entrada de 14/11/2026: texto no HTML, seções na ordem do plano de páginas, provas de um lugar só, endereços do formulário,
+// duas fontes, contraste AA, formulário limpo e cabeçalho de compartilhamento igual nos dois index.html.
+const SECOES_ENTRADA = ['apresentacao', 'experimente', 'como-funciona', 'o-que-voce-ganha', 'provas', 'por-que', 'perguntas', 'entrar'];
+await item('entrada de 14/11: texto da apresentação no HTML, seções na ordem, provas no ar de um lugar só, duas fontes e contraste AA', async () => {
+  const bloco = arquivo => { const t = fs.readFileSync(path.join(RAIZ, arquivo), 'utf8'); const i = t.indexOf('<!-- entrada:inicio'), f = t.indexOf('<!-- entrada:fim -->'); certo(i > 0 && f > i, 'bloco da entrada em ' + arquivo); return t.slice(i, f); };
+  const [raiz, aplicacao] = ['index.html', 'app/public/index.html'].map(bloco);
+  igual(raiz, aplicacao, 'mesmo bloco nos dois index.html');
+  certo(raiz.includes('<div class="entrada" data-estatica>'), 'bloco marcado como molde');
+  for (const id of SECOES_ENTRADA) certo(raiz.includes(`id="${id}"`), 'seção no HTML: ' + id);
+  const fonteApp = fs.readFileSync(path.join(RAIZ, 'app/public/app.js'), 'utf8');
+  for (const trecho of ['Como funciona', 'O que você ganha', 'Perguntas frequentes', 'Por que estudar assim', 'Quanto custa?']) { certo(raiz.includes(trecho), 'texto no HTML: ' + trecho); certo(!fonteApp.includes(trecho), 'texto só no HTML, fora do app.js: ' + trecho); }
+  const cabeca = arquivo => { const t = fs.readFileSync(path.join(RAIZ, arquivo), 'utf8'); return [(t.match(/<title>[^<]+<\/title>/) || [''])[0]].concat(['name="description"', 'rel="canonical"', 'og:title', 'og:description', 'og:image"', 'og:url', 'twitter:card'].map(c => (t.match(new RegExp('<[^>]*' + c.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '[^>]*>')) || [''])[0])); };
+  const [c1, c2] = ['index.html', 'app/public/index.html'].map(cabeca);
+  certo(c1.every(Boolean), 'título, descrição e compartilhamento: ' + JSON.stringify(c1)); igual(c1, c2, 'cabeçalho igual nos dois index.html');
+  // Sem JavaScript o molde fica escondido: quem tem sessão guardada não vê a apresentação antes da questão.
+  await p.s('Emulation.setScriptExecutionDisabled', {value: true});
+  try { await p.ir(URL_LOCAL); igual(await p.avaliar('getComputedStyle(document.querySelector(".entrada[data-estatica]")).display'), 'none', 'molde escondido até o app.js decidir'); }
+  finally { await p.s('Emulation.setScriptExecutionDisabled', {value: false}); }
+  await p.tamanho(390, 844); await p.ir(URL_LOCAL); await p.esperar('document.querySelector("#acesso")'); await p.avaliar('document.fonts.ready');
+  igual(await p.avaliar('[...document.querySelectorAll(".entrada section[id]")].map(s => s.id)'), SECOES_ENTRADA, 'seções na ordem do plano de páginas');
+  igual(await p.avaliar('document.querySelectorAll(".entrada[data-estatica], [data-lugar=faixa-que-corre]").length'), 0, 'molde trocado pela página desenhada');
+  const provas = await p.avaliar(`({lista: PROVAS_NO_AR.map(x => x.prova + ' ' + x.edicao), total: PROVAS_NO_AR.reduce((s, x) => s + x.questoes, 0),
+    itens: [...document.querySelectorAll('.provas-lista li strong')].map(e => e.textContent), numero: document.querySelector('.numero-cartaz strong').textContent,
+    outras: (document.querySelector('.entrada').innerText.match(/Fuvest|USP|Unesp|Unicamp|Famerp/g) || [])})`);
+  igual(provas.itens, provas.lista, 'provas desenhadas a partir de PROVAS_NO_AR'); igual(provas.numero, provas.total.toLocaleString('pt-BR'), 'total do banco');
+  igual(provas.lista, ['Enem 2024', 'Enem 2025'], 'no ar hoje só o Enem 2024 e o 2025'); igual(provas.outras, [], 'nenhuma prova prometida antes de entrar no banco');
+  const fontes = await p.avaliar(`({usadas: [...new Set([...document.querySelectorAll('body *')].filter(e => e.getClientRects().length && [...e.childNodes].some(n => n.nodeType === 3 && n.textContent.trim())).map(e => getComputedStyle(e).fontFamily.split(',')[0].replace(/"/g, '')))].sort(),
+    baixadas: [...new Set([...document.fonts].filter(f => f.status === 'loaded').map(f => f.family.replace(/"/g, '')))].sort()})`);
+  igual(fontes.usadas, ['Atkinson Hyperlegible Next', 'Bricolage Grotesque'], 'só Bricolage e Atkinson na entrada'); igual(fontes.baixadas, ['Atkinson Hyperlegible Next', 'Bricolage Grotesque'], 'Newsreader e JetBrains Mono não baixam');
+  for (const largura of [390, 768, 1440]) {
+    await p.tamanho(largura, 900); await dormir(150);
+    const fracos = await p.avaliar(`(() => { const cor = t => (t.match(/[\\d.]+/g) || []).map(Number);
+      const lum = ([r, g, b]) => [r, g, b].map(c => { c /= 255; return c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4; }).reduce((s, c, i) => s + c * [0.2126, 0.7152, 0.0722][i], 0);
+      const razao = (a, b) => { const [x, y] = [lum(a), lum(b)].sort((m, n) => n - m); return Math.round((x + 0.05) / (y + 0.05) * 100) / 100; };
+      const fundo = e => { for (let x = e; x; x = x.parentElement) { const v = cor(getComputedStyle(x).backgroundColor); if (v.length === 3 || v[3] > 0.5) return v.slice(0, 3); } return [255, 255, 255]; };
+      return [...document.querySelectorAll('body *')].filter(e => e.getClientRects().length && !e.closest('.oculto, button:disabled') && [...e.childNodes].some(n => n.nodeType === 3 && n.textContent.trim()))
+        .map(e => [e.tagName + '.' + e.className + ' "' + e.textContent.trim().slice(0, 24) + '"', razao(cor(getComputedStyle(e).color).slice(0, 3), fundo(e))]).filter(([, r]) => r < 4.5); })()`);
+    igual(fracos, [], 'contraste AA em ' + largura);
+    // Formulário limpo: nenhum selo, tarja, cena ou pegada sobre ele ou a menos de 16 px.
+    const encostados = await p.avaliar(`(() => { const f = document.querySelector('.formulario').getBoundingClientRect();
+      return [...document.querySelectorAll('.selo-desenho, .selo-novo, .tarja, .cena-mar, .pegadas, .faixa-corre')].filter(e => { const r = e.getBoundingClientRect(); return r.right > f.left - 16 && r.left < f.right + 16 && r.bottom > f.top - 16 && r.top < f.bottom + 16; }).map(e => e.className.baseVal ?? e.className); })()`);
+    igual(encostados, [], 'formulário limpo em ' + largura);
+    certo(await p.semRolagemLateral(), 'rolagem lateral em ' + largura);
+  }
+  await p.tamanho(390, 844); await dormir(100);
+  // Cores de decoração da página: azul-mar, amarelo-sol e laranja-boia; nada de rosa-goiaba nem roxo-ipê.
+  const decoracao = await p.avaliar(`(() => { const sonda = document.createElement('span'); document.body.append(sonda); const valor = v => { sonda.style.color = 'var(' + v + ')'; return getComputedStyle(sonda).color; };
+    const proibidas = ['--rosa-goiaba', '--roxo-ipe', '--rosa-claro', '--roxo-claro'].map(valor); sonda.remove();
+    const usadas = new Set([...document.querySelectorAll('.entrada, .entrada *')].flatMap(e => { const c = getComputedStyle(e); return [c.backgroundColor, c.fill, c.color]; }));
+    return proibidas.filter(c => usadas.has(c)); })()`);
+  igual(decoracao, [], 'sem rosa-goiaba nem roxo-ipê na entrada');
+});
+await item('entrada de 14/11: ?criar-conta, #entrar e o link Entrar do topo levam ao formulário; o formulário continua igual', async () => {
+  const noFormulario = () => p.avaliar('(() => { const r = document.querySelector("#entrar").getBoundingClientRect(); return r.top >= 0 && r.top < innerHeight / 2; })()');
+  await p.tamanho(390, 844); await p.ir(URL_LOCAL + '/?criar-conta'); await p.esperar('document.querySelector("#nome")'); await dormir(300);
+  certo(await noFormulario(), '?criar-conta rola até o formulário'); igual(await p.avaliar('document.activeElement.id'), 'nome', 'foco no primeiro campo do cadastro');
+  igual(await p.texto('#titulo-acesso'), 'Crie sua conta', 'título do cadastro');
+  await p.ir(URL_LOCAL + '/#entrar'); await p.esperar('document.querySelector("#acesso") && !document.querySelector("#nome")'); await dormir(300);
+  certo(await noFormulario(), '#entrar rola até o formulário'); igual(await p.avaliar('document.activeElement.id'), 'email', 'foco no e-mail');
+  await p.ir(URL_LOCAL + '/#criar-conta'); await p.esperar('document.querySelector("#nome")'); await dormir(300); certo(await noFormulario(), '#criar-conta rola até o formulário');
+  await p.ir(URL_LOCAL); await p.esperar('document.querySelector("#acesso")'); await p.avaliar('scrollTo(0, 0)');
+  certo(await p.avaliar('getComputedStyle(document.querySelector(".entrar-topo")).display !== "none" && document.querySelector(".entrar-topo").getBoundingClientRect().height >= 44'), 'link Entrar no topo da entrada, com 44 px de toque');
+  await p.clicar('.entrar-topo'); await dormir(900); certo(await noFormulario(), 'link Entrar do topo leva ao formulário'); igual(await p.avaliar('document.activeElement.id'), 'email', 'foco no e-mail pelo topo');
+  // Responder a demonstração e pedir a conta troca só o formulário: a demonstração respondida continua.
+  await p.clicar('#demonstracao input[value="3"]'); await p.clicar('#quero-conta'); await p.esperar('document.querySelector("#nome")'); await dormir(600);
+  igual(await p.avaliar('document.querySelector("#demonstracao").disabled'), true, 'demonstração continua respondida'); certo(await noFormulario(), 'Criar minha conta leva ao formulário');
+  await p.clicar('#trocar'); await p.esperar('!document.querySelector("#nome")'); igual(await p.texto('#titulo-acesso'), 'Entre para estudar', 'troca para entrar');
+  igual(await p.avaliar('[...document.querySelectorAll("#acesso input")].map(i => i.name + ":" + i.type + ":" + i.autocomplete)'), ['email:text:username', 'senha:password:current-password'], 'campos da entrada iguais');
+  await p.clicar('#trocar'); await p.esperar('document.querySelector("#nome")');
+  igual(await p.avaliar('[...document.querySelectorAll("#acesso input")].map(i => i.name + ":" + i.type + ":" + i.autocomplete + ":" + i.minLength)'), ['nome:text:name:2', 'email:email:username:-1', 'senha:password:new-password:12'], 'campos do cadastro iguais');
+  await p.clicar('#trocar'); await p.esperar('!document.querySelector("#nome")');
+  // Foco visível no link do topo, com contraste de pelo menos 3:1 sobre o branco.
+  await p.tecla('x'); await p.avaliar('document.querySelector(".entrar-topo").focus()');
+  igual(await p.avaliar('[getComputedStyle(document.querySelector(".entrar-topo")).outlineStyle, getComputedStyle(document.querySelector(".entrar-topo")).outlineColor]'), ['solid', 'rgb(39, 71, 245)'], 'foco azul-mar no link do topo');
+  await p.avaliar('document.activeElement.blur(); scrollTo(0, 0)');
 });
 await item('cadastro cai direto numa questão curta, sem clique a mais', async () => {
   await cadastrar('Primeira');
@@ -163,6 +239,7 @@ await item('cadastro cai direto numa questão curta, sem clique a mais', async (
   igual(await hoje(), '0 de 5', 'ritmo do dia');
   igual(await p.avaliar('document.querySelector("#conferir").disabled'), true, 'Conferir só depois de marcar');
   certo(!(await p.avaliar('fetch("/api/painel").then(r => r.text())')).includes('"correta"'), 'painel sem gabarito');
+  igual(await p.avaliar('getComputedStyle(document.querySelector(".entrar-topo")).display'), 'none', 'link Entrar do topo some com a conta aberta');
 });
 await item('menu embaixo no celular e no cabeçalho no computador, com cinco destinos', async () => {
   igual(await p.avaliar('[...document.querySelectorAll("#menu a")].map(a => a.innerText.trim())'), ['Estudar', 'Progresso', 'Simulado', 'Nota', 'Conta'], 'destinos');
@@ -511,7 +588,7 @@ await item('tema: preferência guardada por conta, entra antes do primeiro quadr
   const {identifier} = await p.s('Page.addScriptToEvaluateOnNewDocument', {source: `(() => {
     const registrar = nome => { if (window[nome]) return; const raiz = document.documentElement; window[nome] = {tema: raiz.dataset.tema || null, fundo: raiz.isConnected ? getComputedStyle(raiz).backgroundColor : null}; };
     requestAnimationFrame(() => registrar('__primeiroQuadro'));
-    new MutationObserver(() => { const c = document.querySelector('#conteudo'); if (c && c.childElementCount) registrar('__primeiraTela'); }).observe(document, {childList: true, subtree: true});
+    new MutationObserver(() => { const c = document.querySelector('#conteudo'); if (c && [...c.children].some(x => !x.matches('.entrada[data-estatica]'))) registrar('__primeiraTela'); }).observe(document, {childList: true, subtree: true});
   })()`});
   try { await p.recarregar(); await estudoPronto(); } finally { await p.s('Page.removeScriptToEvaluateOnNewDocument', {identifier}); }
   igual(await p.avaliar('window.__primeiraTela'), {tema: 'noturno', fundo: PRETO}, 'primeira tela de dentro já no noturno');

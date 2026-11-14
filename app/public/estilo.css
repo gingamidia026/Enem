@@ -122,13 +122,14 @@ html[data-entrada=ponteiro] button:not(:disabled):active, .botao:active { transf
 .menu a[aria-current=page] { color: var(--destaque); border-top-color: var(--destaque); font-weight: 650; }
 main { flex: 1; width: 100%; padding: 1rem max(1rem,env(safe-area-inset-right)) 2rem max(1rem,env(safe-area-inset-left)); }
 #conteudo { max-width: 46rem; margin-inline: auto; }
-/* Entrada por mola. Nas telas de estudo, um bloco só e 0,36 s; na entrada, 0,6 s em cascata de 80 ms, até quatro faixas. */
+/* Entrada por mola. Nas telas de estudo, um bloco só e 0,36 s; na entrada, 0,6 s em cascata de 80 ms, três faixas. */
 #conteudo.entrou > * { animation: entrar 360ms var(--mola) both; }
 #conteudo.entrou > .entrada { animation: none; }
 #conteudo.entrou > .entrada > * { animation: entrar 600ms var(--mola) both; }
 #conteudo.entrou > .entrada > :nth-child(2) { animation-delay: 80ms; }
 #conteudo.entrou > .entrada > :nth-child(3) { animation-delay: 160ms; }
-#conteudo.entrou > .entrada > :nth-child(n+4) { animation-delay: 240ms; }
+/* Na entrada, só as três primeiras faixas (topo, faixa que corre e demonstração) entram; as de baixo já estão paradas. */
+#conteudo.entrou > .entrada > :nth-child(n+4) { animation: none; }
 @keyframes entrar { from { opacity: 0; transform: translateY(12px); } }
 #aviso { max-width: 46rem; margin: 1rem auto 0; color: var(--texto); font-weight: 500; }
 #aviso.falha { color: var(--vermelho); }
@@ -281,57 +282,195 @@ progress.largo { height: 8px; margin-bottom: 1rem; }
 .dispositivo strong { font-weight: 600; }
 .dispositivo .texto-botao, .assunto .texto-botao, .linha-resultado .texto-botao { flex-shrink: 0; white-space: nowrap; overflow-wrap: normal; }
 
-/* Entrada: faixas de papel na largura toda, alternando branco, areia e azul claro. */
+/* ---------- Página de entrada (direção de 14/11/2026, frente entrada) ----------
+   A tela mais cheia do PU: faixas na largura toda alternando papel, areia e faixas claras, uma faixa saturada azul-mar,
+   a faixa que corre em amarelo-sol, selos, uma tarja, ondas, trilha de pegadas, título e números de cartaz.
+   Três cores de decoração na página: azul-mar conduz; amarelo-sol e laranja-boia entram cada uma numa faixa.
+   Duas famílias: Bricolage (cartaz, títulos e números) e Atkinson (texto). Newsreader e JetBrains Mono esperam a resposta
+   de Dominique (afazer "Confirmar as fontes do PU"). Sem tema: a entrada fica clara nos dois.
+   O formulário fica limpo: nenhum selo, tarja ou desenho nele ou encostado nele. Tudo para com movimento reduzido. */
+.entrada[data-estatica] { display: none; }
 main:has(.entrada) { padding: 0; }
 #conteudo:has(.entrada) { max-width: none; }
-.faixa { padding: 2.5rem max(1rem,env(safe-area-inset-right)) 2.75rem max(1rem,env(safe-area-inset-left)); }
-.faixa > section { max-width: 64rem; margin-inline: auto; }
+.entrada {
+  --foco: var(--azul-mar);
+  --forma-pata: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='78 84 356 350'%3E%3Cpath d='M251.7 86.4C247.1 87.0 243.1 88.2 238.9 90.2C227.7 95.8 219.8 106.4 217.7 118.9C217.1 122.8 217.1 122.4 215.8 169.6C215.1 191.8 214.6 210.6 214.6 211.5C214.4 215.9 213.8 217.9 212.1 219.5C209.8 221.9 206.7 221.4 202.9 218.1C202.5 217.8 191.3 206.1 178.0 192.2C149.5 162.4 147.8 160.7 144.3 158.0C132.4 149.1 117.0 147.6 103.7 154.1C88.0 161.9 79.3 179.2 82.7 196.3C83.9 202.6 86.5 208.0 90.9 213.8C92.5 215.8 88.7 211.3 131.2 261.4C173.8 311.6 171.3 308.7 172.6 310.3C175.2 313.7 176.8 316.4 178.4 320.8C179.0 322.3 188.8 350.3 192.5 360.9C195.0 368.3 195.6 370.4 196.2 375.9C196.8 380.0 197.1 381.7 197.6 384.0C203.0 408.3 222.9 426.8 247.5 430.4C253.0 431.2 259.2 431.2 264.6 430.4C289.2 426.8 309.2 408.3 314.6 384.0C315.1 381.7 315.4 380.0 315.9 375.9C316.8 369.0 316.2 370.9 325.8 343.2C335.3 316.0 334.8 317.4 336.8 314.1C338.6 311.1 334.1 316.5 380.1 262.2C423.4 211.2 419.6 215.8 421.1 213.8C423.5 210.7 424.8 208.6 426.2 205.7C435.4 186.6 427.4 163.5 408.3 154.1C395.1 147.6 379.6 149.1 367.7 158.0C364.2 160.7 362.5 162.4 334.0 192.2C320.7 206.1 309.6 217.8 309.1 218.1C307.0 220.0 305.8 220.6 304.1 220.9C300.7 221.3 298.3 218.8 297.8 214.1C297.6 212.4 297.5 211.7 296.4 169.6C295.1 122.4 295.1 122.8 294.4 118.9C291.6 101.6 277.7 88.4 260.2 86.4C258.2 86.2 253.8 86.2 251.7 86.4Z'/%3E%3C/svg%3E");
+  --forma-onda: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 48 16'%3E%3Cpath d='M0 8q12-8 24 0t24 0v8H0z'/%3E%3C/svg%3E");
+  --forma-linha: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 48 12'%3E%3Cpath d='M0 6q12-6 24 0t24 0' fill='none' stroke='black' stroke-width='2'/%3E%3C/svg%3E");
+  font-family: var(--fonte-texto); font-size: 1.0625rem; line-height: 1.6; color: var(--texto);
+}
+body.sem-sessao { --foco: var(--azul-mar); }
+body.sem-sessao :is(.topo, footer, .pular) { font-family: var(--fonte-texto); }
+body.sem-sessao .topo { background: #FFFFFF; border-bottom-color: var(--tinta); }
+/* Link "Entrar" do topo: só com a entrada desenhada; leva ao formulário no fim da página. */
+.entrar-topo { display: none; }
+body.sem-sessao:has(#conteudo > .entrada:not([data-estatica])) .entrar-topo {
+  display: inline-flex; align-items: center; min-height: 2.75rem; padding: .5rem 1rem; border: 1px solid var(--tinta); border-radius: 8px;
+  background: #FFFFFF; color: var(--tinta); font-weight: 700; text-decoration: none; transition: background-color 200ms var(--troca);
+}
+@media (hover:hover) and (pointer:fine) { body.sem-sessao .entrar-topo:hover { background: var(--amarelo-claro); } }
+.entrada :is(h1, h2, h3) { font-family: var(--fonte-cartaz); color: var(--tinta); letter-spacing: -.02em; text-wrap: balance; }
+.entrada h2 { font-weight: 800; font-size: clamp(2.25rem, 8vw, 4rem); line-height: .95; margin: 0 0 1.5rem; }
+.entrada h3 { font-weight: 700; font-size: clamp(1.375rem, 2vw, 1.625rem); line-height: 1.15; margin: 0 0 .5rem; letter-spacing: -.01em; }
+
+/* Faixas */
+.faixa { padding: 3rem max(1rem,env(safe-area-inset-right)) 3.25rem max(1rem,env(safe-area-inset-left)); }
+.faixa > section { max-width: 72rem; margin-inline: auto; }
 .faixa-papel { background: #FFFFFF; }
+.faixa-topo { padding-top: 2rem; }
 .faixa-areia { background: var(--suave); }
-.faixa-azul { background: var(--azul-fundo); }
-.faixa-azul > section { max-width: 30rem; }
-.faixa-areia > section { max-width: 46rem; }
-/* Título de cartaz: só aqui. Serifada do PU, sem fonte nova. */
-.apresentacao h1 { font-size: clamp(3rem, 12vw, 7rem); line-height: .95; letter-spacing: -.04em; margin: .25rem 0 max(1.75rem, .4em); max-width: 14ch; }
-.selos-cartaz { display: inline-flex; gap: .125em; margin-left: .2em; vertical-align: -.08em; }
-.selo-desenho { width: .9em; height: .9em; overflow: visible; }
-.selo-desenho * { stroke: var(--texto); stroke-width: 1px; vector-effect: non-scaling-stroke; stroke-linejoin: round; stroke-linecap: round; }
-.selo-desenho .f-azul { fill: var(--azul-fundo); }
-.selo-desenho .f-amarelo { fill: var(--amarelo-fundo); }
-.selo-desenho .f-nada { fill: none; }
+.faixa-boia { background: var(--laranja-claro); }
+.faixa-mar-claro { background: var(--azul-mar-claro); }
+.faixa-sol-claro { background: var(--amarelo-claro); }
+/* A única faixa saturada: azul-mar com texto branco (6,35:1). */
+.faixa-mar { background: var(--azul-mar); color: #FFFFFF; --foco: #FFFFFF; }
+.entrada .faixa-mar h2 { color: #FFFFFF; }
+/* Onda: meia-onda chapada da faixa de baixo subindo na de cima. */
+.onda { height: 16px; background: var(--de); }
+.onda::after { content: ""; display: block; height: 100%; background: var(--para); -webkit-mask: var(--forma-onda) 0 100% / 48px 16px repeat-x; mask: var(--forma-onda) 0 100% / 48px 16px repeat-x; }
+.de-areia { --de: var(--suave); }
+.de-mar-claro { --de: var(--azul-mar-claro); }
+.para-boia { --para: var(--laranja-claro); }
+.para-mar { --para: var(--azul-mar); }
+.onda-linha { width: 9rem; height: 12px; margin-bottom: 1.5rem; background: var(--azul-mar); -webkit-mask: var(--forma-linha) 0 0 / 48px 12px repeat-x; mask: var(--forma-linha) 0 0 / 48px 12px repeat-x; }
+
+/* Topo: logo no cabeçalho, título de cartaz, apoio, tarja e a cena do mar desenhada em código. */
+.apresentacao { display: grid; gap: 1.25rem; align-items: center; }
+.apresentacao h1 { font-weight: 800; font-size: clamp(3rem, 12vw, 7rem); line-height: .92; margin: 0 0 1.25rem; max-width: 12ch; }
+.apresentacao .lide { font-size: 1.1875rem; line-height: 1.5; max-width: 34rem; margin: 0 0 1.25rem; }
+.tarja { display: inline-block; margin: 0 0 .25rem .25rem; padding: .25rem .875rem; border: 1px solid var(--tinta); background: var(--amarelo-sol); color: #000000;
+  font-family: var(--fonte-cartaz); font-weight: 800; font-size: 1.25rem; letter-spacing: .04em; text-transform: uppercase; rotate: -3deg; }
+.cena-mar { display: block; width: 100%; max-width: 19rem; height: auto; justify-self: center; overflow: visible; }
+.cena-mar * { vector-effect: non-scaling-stroke; stroke-linejoin: round; stroke-linecap: round; }
+.c-mar-claro { fill: var(--azul-mar-claro); }
+.c-sol { fill: var(--amarelo-sol); }
+.c-mar { fill: var(--azul-mar); }
+.c-boia { fill: var(--laranja-boia); }
+.c-papel { fill: #FFFFFF; }
+.c-contorno { stroke: var(--tinta); stroke-width: 1.5px; }
+.c-linha { fill: none; stroke: var(--tinta); stroke-width: 1.5px; }
+.c-espuma { fill: none; stroke: #FFFFFF; stroke-width: 2px; }
+.cena-mar .c-faixas-boia { fill: none; stroke: #FFFFFF; stroke-width: 12; vector-effect: none; stroke-dasharray: 8.17 16.18; }
+.boia { transform-box: fill-box; transform-origin: center; animation: boiar 3.2s ease-in-out infinite; }
+.livro-pescado { transform-box: fill-box; transform-origin: 50% 0; animation: balancar 4.4s ease-in-out infinite; }
+@keyframes boiar { 50% { transform: translateY(-4px) rotate(-5deg); } }
+@keyframes balancar { 0%, 100% { transform: rotate(-4deg); } 50% { transform: rotate(4deg); } }
+
+/* Selos: desenho de 64 × 64, contorno de 1 px em tinta, uma cor chapada e o detalhe de outra, girados. Fora da leitura de tela. */
+.selos-cartaz { display: inline-flex; gap: .1em; margin-left: .15em; vertical-align: -.06em; }
+.selo-desenho { width: .8em; height: .8em; overflow: visible; }
+.selo-desenho *, .selo-novo * { stroke: var(--tinta); stroke-width: 1px; vector-effect: non-scaling-stroke; stroke-linejoin: round; stroke-linecap: round; }
+.f-mar { fill: var(--azul-mar); }
+.f-mar-claro { fill: var(--azul-mar-claro); }
+.f-sol { fill: var(--amarelo-sol); }
+.f-boia { fill: var(--laranja-boia); }
+.f-papel { fill: #FFFFFF; }
+.f-tinta { fill: var(--tinta); }
+.f-nada { fill: none; }
+.selo-novo .faixas-boia { fill: none; stroke: #FFFFFF; stroke-width: 13; vector-effect: none; stroke-dasharray: 8.35 18.35; }
 .giro-livro { rotate: -6deg; }
 .giro-visto { rotate: 8deg; }
 .giro-calendario { rotate: -3deg; }
-/* Faixa que corre: uma tira só, na entrada; laço por CSS, pausa no ponteiro e no foco, parada com movimento reduzido. */
-.faixa-corre { overflow: clip; background: #FFFFFF; border-block: 1px solid var(--texto); }
+.giro-a { rotate: -8deg; }
+.giro-b { rotate: 6deg; }
+.giro-c { rotate: -4deg; }
+.titulo-com-selos { display: flex; flex-wrap: wrap; align-items: center; gap: .75rem 1.25rem; margin-bottom: 1.75rem; }
+.entrada .titulo-com-selos h2 { margin: 0; }
+.selos-soltos { display: inline-flex; gap: .5rem; }
+.selo-novo { width: 3.5rem; height: 3.5rem; overflow: visible; }
+
+/* Faixa que corre: uma tira só, em amarelo-sol com texto preto (13,67:1); laço por CSS, pausa no ponteiro e no foco, parada com movimento reduzido. */
+.faixa-corre { overflow: clip; background: var(--amarelo-sol); border-block: 1px solid var(--tinta); }
 .trilho { display: flex; width: max-content; animation: correr-faixa 60s linear infinite; }
 .faixa-corre:hover .trilho, .faixa-corre:focus-within .trilho { animation-play-state: paused; }
 @keyframes correr-faixa { to { transform: translateX(-50%); } }
-.frases { display: flex; flex-shrink: 0; gap: 1.5rem; margin: 0; padding: .75rem 0 .75rem 1.5rem; list-style: none; }
-.frases li { display: flex; align-items: center; gap: 1.5rem; white-space: nowrap; overflow-wrap: normal; font-size: .8125rem; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--texto); }
-.frases li::after { content: ""; width: .4rem; height: .4rem; border: 1px solid var(--texto); rotate: 45deg; }
-.passos { list-style: none; margin: 1.5rem 0 0; padding: 0; display: grid; gap: 1rem; counter-reset: passo; }
-.passos li { display: grid; grid-template-columns: 2rem 1fr; column-gap: .75rem; counter-increment: passo; }
-.passos li::before { content: counter(passo); grid-row: span 2; display: grid; place-items: center; width: 2rem; height: 2rem; border: 1px solid #858480; border-radius: 50%; font-weight: 650; font-size: .9375rem; }
-.passos strong { font-weight: 650; }
-.passos span { grid-column: 2; color: var(--secundario); font-size: .9375rem; }
-.formulario { padding: 1.5rem 1.25rem; border: 1px solid var(--texto); border-radius: 12px; background: #FFFFFF; }
-.formulario h2 { margin-top: 0; }
+.frases { display: flex; flex-shrink: 0; gap: 1.5rem; margin: 0; padding: .625rem 0 .625rem 1.5rem; list-style: none; }
+.frases li { display: flex; align-items: center; gap: 1.5rem; white-space: nowrap; overflow-wrap: normal; font-family: var(--fonte-cartaz); font-size: 1.25rem; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: #000000; }
+.frases li::after { content: ""; width: .5rem; height: .5rem; border: 1px solid #000000; background: var(--azul-mar); rotate: 45deg; }
+
+/* Questão de demonstração: folha calma como a de dentro, sem decoração. */
+.faixa > .experimente { max-width: 46rem; }
+.experimente [data-lugar="demonstracao"] { padding: 1.25rem 1rem; border: 1px solid var(--tinta); border-radius: 2px; background: #FBFBFA url("textura.svg"); }
+.experimente .rotulo { margin-bottom: 1rem; }
+.experimente .enunciado { max-width: 68ch; }
+.experimente legend { font-weight: 700; padding: 0; margin-bottom: .25rem; }
+.experimente .retorno button { margin-bottom: 1rem; }
+
+/* Como funciona: três passos com o número de cartaz num círculo laranja-boia (preto sobre laranja, 7,35:1). */
+.passos { list-style: none; margin: 0; padding: 0; display: grid; gap: 1.75rem; counter-reset: passo; }
+.passos li { display: grid; grid-template-columns: 3.5rem 1fr; column-gap: 1rem; counter-increment: passo; align-content: start; }
+.passos li::before { content: counter(passo); grid-row: span 2; display: grid; place-items: center; width: 3.5rem; height: 3.5rem; border: 1px solid var(--tinta); border-radius: 50%;
+  background: var(--laranja-boia); color: #000000; font-family: var(--fonte-cartaz); font-weight: 800; font-size: 2rem; line-height: 1; }
+.passos strong { font-family: var(--fonte-cartaz); font-weight: 700; font-size: 1.5rem; line-height: 1.15; color: var(--tinta); }
+.passos span { grid-column: 2; }
+
+/* O que você ganha: lista com fio de 1 px em tinta; título e como o PU entrega. */
+.lista-ganhos { list-style: none; margin: 0; padding: 0; display: grid; column-gap: 2rem; }
+.lista-ganhos li { padding: 1.25rem 0 1.5rem; border-top: 1px solid var(--tinta); }
+.lista-ganhos p { margin: 0; }
+
+/* Provas no PU: a lista sai de PROVAS_NO_AR no app.js; o total vai num número de cartaz sobre o sol. */
+.provas { display: grid; gap: 0 3rem; }
+.provas-texto { max-width: 36rem; margin: 0 0 1.75rem; }
+.numero-cartaz { display: flex; align-items: center; gap: 1rem; margin: 0 0 1.5rem; }
+.numero-cartaz strong { display: grid; place-items: center; flex-shrink: 0; width: 8.5rem; height: 8.5rem; border: 1px solid var(--tinta); border-radius: 50%;
+  background: var(--amarelo-sol); color: #000000; font-family: var(--fonte-cartaz); font-weight: 800; font-size: 3.5rem; letter-spacing: -.02em; font-variant-numeric: tabular-nums; }
+.numero-cartaz span { font-family: var(--fonte-cartaz); font-weight: 700; font-size: 1.5rem; line-height: 1.1; max-width: 11ch; }
+.provas-lista { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: .75rem; }
+.provas-lista li { display: grid; min-width: 9rem; padding: .75rem 1rem; border: 1px solid #FFFFFF; border-radius: 2px; }
+.provas-lista strong { font-family: var(--fonte-cartaz); font-weight: 700; font-size: 1.5rem; line-height: 1.15; }
+
+/* Por que, perguntas e chamada */
+.faixa > .por-que { max-width: 46rem; }
+.faixa > .perguntas { max-width: 50rem; }
+.perguntas details { border-top: 1px solid var(--tinta); }
+.perguntas details:last-of-type { border-bottom: 1px solid var(--tinta); }
+.perguntas summary { display: flex; align-items: center; justify-content: space-between; gap: 1rem; min-height: 3.25rem; padding: .75rem 0; font-weight: 700; cursor: pointer; list-style: none; }
+.perguntas summary::-webkit-details-marker { display: none; }
+.perguntas summary::after { content: "+" / ""; flex-shrink: 0; font-family: var(--fonte-cartaz); font-weight: 800; font-size: 1.75rem; line-height: 1; color: var(--azul-mar); }
+.perguntas details[open] summary::after { content: "−" / ""; }
+.perguntas details p { margin: 0 0 1.25rem; max-width: 40rem; }
+/* Trilha de pegadas: a pata do logo sozinha, de 24 px (abaixo disso vira seta), entre as perguntas e o formulário, giro de 12° para cada lado. */
+.pegadas { display: flex; flex-direction: column; align-items: center; gap: 12px; width: max-content; margin: 2.5rem auto 0; }
+.pegadas i { display: block; width: 24px; height: 24px; background: var(--azul-mar); -webkit-mask: var(--forma-pata) center / contain no-repeat; mask: var(--forma-pata) center / contain no-repeat; rotate: -12deg; translate: -11px 0; }
+.pegadas i:nth-child(even) { rotate: 12deg; translate: 11px 0; }
+.faixa > .chamada { max-width: 34rem; }
+.chamada-texto { margin: -.5rem 0 1.5rem; }
+.formulario { padding: 1.5rem 1.25rem; border: 1px solid var(--tinta); border-radius: 12px; background: #FFFFFF; }
+.entrada .formulario h3 { margin: 0; font-size: 1.75rem; }
+.formulario form button { width: 100%; margin-top: 1.25rem; }
+.privacidade { margin: 1.25rem 0 0; }
+.privacidade small { color: var(--texto); font-size: .875rem; }
+
+@media (min-width: 40rem) { .lista-ganhos { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (min-width: 56rem) {
+  .faixa { padding-block: 5rem; padding-inline: 2rem; }
+  /* No computador o título também acompanha a altura da tela, para o começo da demonstração aparecer na primeira tela (regra decoração-sem-respiro). */
+  .faixa-topo { padding-block: 2.5rem 3rem; }
+  .apresentacao h1 { font-size: clamp(3rem, min(12vw, 10vh), 7rem); max-width: 13ch; }
+  .apresentacao { grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); gap: 3rem; }
+  .cena-mar { max-width: 34rem; }
+  .experimente [data-lugar="demonstracao"] { padding: 2rem 2.5rem; }
+  .passos { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 2rem; }
+  .provas { grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr); grid-template-rows: auto auto 1fr; align-items: start; }
+  .provas > h2, .provas-texto { grid-column: 1; }
+  .provas > [data-lugar="provas"] { grid-column: 2; grid-row: 1 / span 3; }
+  .faixa > .chamada { max-width: 64rem; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 28rem); column-gap: 4rem; align-items: start; }
+  .chamada > h2, .chamada-texto { grid-column: 1; }
+  .faixa > .chamada { grid-template-rows: auto auto 1fr auto; }
+  .chamada > .formulario { grid-column: 2; grid-row: 1 / span 3; }
+  .chamada > .privacidade { grid-column: 2; grid-row: 4; }
+  .formulario { padding: 2rem; }
+}
+@media (min-width: 64rem) { .lista-ganhos { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
 label { display: block; font-weight: 550; margin: 1rem 0 .375rem; }
 label.alternativa { display: flex; font-weight: 400; margin: .5rem 0; }
 input:not([type=radio]):not([type=checkbox]), select { width: 100%; min-height: 3rem; padding: .625rem .75rem; border: 1px solid var(--fio); border-radius: 8px; background: var(--cartao); }
 small { display: block; color: var(--secundario); font-size: .8125rem; margin: .5rem 0 0; }
 small.legenda { color: inherit; }
-.formulario form button { width: 100%; margin-top: 1.25rem; }
 .troca { width: 100%; margin-top: .75rem; }
 .erro-campo { color: var(--vermelho); font-weight: 500; margin: .75rem 0 0; }
 .erro-campo:empty { display: none; }
-.privacidade { margin: 1rem 0 0; }
-.experimente { padding: 1.25rem 1rem; border: 1px solid #858480; border-radius: 2px; background: #FBFBFA url("textura.svg"); }
-.experimente h2 { margin-top: 0; }
-.experimente .rotulo { margin-bottom: 1rem; }
-.experimente legend { font-weight: 550; padding: 0; margin-bottom: .25rem; }
-.experimente .retorno button { margin-bottom: 1rem; }
 
 /* Simulação de nota: formulários claros e resultados sem cartões decorativos. */
 .simulador { max-width: 48rem; }
@@ -416,12 +555,6 @@ progress::-webkit-progress-bar { background: var(--cartao); }
   footer { padding-bottom: 1.25rem; }
   .questao { padding: 2rem 2.5rem 1rem; }
   .barra-acao { bottom: 0; margin-inline: -2.5rem; padding-inline: 2.5rem; }
-  .faixa { padding-block: 5rem; padding-inline: 2rem; }
-  .faixa-papel { padding-top: 4.5rem; }
-  .passos { grid-template-columns: repeat(3, minmax(0,1fr)); gap: 1.5rem; margin-top: 2.5rem; }
-  .passos li { align-content: start; }
-  .formulario { padding: 2rem; }
-  .experimente { padding: 2rem 2.5rem; }
   .marco, .passo { padding: 2rem; }
   .ficha .corte { max-width: 24rem; }
   /* Item ativo do menu como a ficha marcada: pílula na cor do texto. */

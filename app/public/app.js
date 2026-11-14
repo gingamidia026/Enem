@@ -478,14 +478,29 @@ const DEMONSTRACAO = {
     'Os raios X ionizam os materiais metálicos normalmente encontrados em bagagens de mão, quando difratados pelos componentes do computador.'
   ]
 };
-// Selos desenhados para o PU (livro, visto, calendário), só na entrada e fora da leitura de tela.
-const SELOS = `<span class="selos-cartaz" aria-hidden="true">
-<svg class="selo-desenho giro-livro" viewBox="0 0 64 64" focusable="false"><path class="f-azul" d="M5 17c9-5 18-5 27 1 9-6 18-6 27-1v32c-9-5-18-5-27 1-9-6-18-6-27-1z"/><path class="f-nada" d="M32 18v32M11 26c5-2 10-2 15 0M11 33c5-2 10-2 15 0M38 33c5-2 10-2 15 0"/><path class="f-amarelo" d="M41 15v15l4-3 4 3V14z"/></svg>
-<svg class="selo-desenho giro-visto" viewBox="0 0 64 64" focusable="false"><circle class="f-azul" cx="32" cy="32" r="26"/><path class="f-amarelo" d="M16 33l6-6 7 7 13-15 6 6-19 21z"/></svg>
-<svg class="selo-desenho giro-calendario" viewBox="0 0 64 64" focusable="false"><rect class="f-azul" x="8" y="13" width="48" height="43" rx="4"/><path class="f-nada" d="M8 25h48M20 8v10M44 8v10"/><rect class="f-nada" x="15" y="32" width="8" height="7"/><rect class="f-amarelo" x="28" y="32" width="8" height="7"/><rect class="f-nada" x="41" y="32" width="8" height="7"/><rect class="f-nada" x="15" y="44" width="8" height="7"/><rect class="f-nada" x="28" y="44" width="8" height="7"/></svg>
-</span>`;
-// Faixa que corre: frases que a entrada já diz. A cópia fica fora da leitura de tela; parada com movimento reduzido.
-const FRASES_FAIXA = ['Questões oficiais do Enem', 'Uma questão por vez', 'O que você erra volta em 1, 3 e 7 dias', 'Meta pequena por dia', 'Gratuito'];
+// Página de entrada (direção de 14/11/2026). O texto da apresentação mora no index.html, num bloco igual nos dois arquivos
+// (o teste confere), para a busca ler sem JavaScript. O bloco fica escondido até aqui: com sessão guardada, a questão abre
+// sem mostrar a apresentação antes. O molde é lido uma vez, antes de qualquer tela; os lugares com data-lugar são
+// preenchidos abaixo (faixa que corre, questão de demonstração, provas no ar e formulário).
+const MOLDE_ENTRADA = (() => {
+  const bloco = conteudo.querySelector('.entrada[data-estatica]'); if (!bloco) return '';
+  const copia = bloco.cloneNode(true); copia.removeAttribute('data-estatica'); return copia.outerHTML;
+})();
+// Sem o bloco (index.html antigo), a entrada fica só com o título, a demonstração e o formulário.
+const MOLDE_RESERVA = `<div class="entrada"><div class="faixa faixa-papel"><section class="apresentacao" id="apresentacao"><h1>Estude para o Enem uma questão por vez.</h1></section></div>
+<div data-lugar="faixa-que-corre"></div><div class="faixa faixa-areia"><section class="experimente" id="experimente"><h2 id="titulo-experimente">Experimente uma questão</h2><div data-lugar="demonstracao"></div></section></div>
+<div class="faixa faixa-sol-claro"><section class="chamada" id="entrar"><div class="formulario" data-lugar="formulario"></div></section></div></div>`;
+// Provas no ar: fonte única da lista "Provas no PU" da entrada. Conferido em 14/11/2026 no catálogo publicado (.catalogo/atual.json):
+// 356 questões, Enem 2024 (179) e Enem 2025 (177). Uma edição só entra aqui depois de publicada no catálogo.
+const PROVAS_NO_AR = [{prova: 'Enem', edicao: 2024, questoes: 179}, {prova: 'Enem', edicao: 2025, questoes: 177}];
+function provasHtml() {
+  const total = PROVAS_NO_AR.reduce((soma, p) => soma + p.questoes, 0);
+  return `<p class="numero-cartaz"><strong>${total.toLocaleString('pt-BR')}</strong><span>questões oficiais no banco</span></p>
+<ul class="provas-lista">${PROVAS_NO_AR.map(p => `<li><strong>${escapar(p.prova)} ${p.edicao}</strong><span>${plural(p.questoes, 'questão', 'questões')}</span></li>`).join('')}</ul>`;
+}
+// Faixa que corre: frases que a entrada já diz, em caixa alta com até três palavras (identidade de 14/11/2026).
+// A cópia fica fora da leitura de tela; parada com movimento reduzido.
+const FRASES_FAIXA = ['Questões oficiais', 'Uma por vez', 'Revisão espaçada', 'Meta pequena', 'Simulado curto', 'Gratuito'];
 function faixaQueCorre() {
   const lista = copia => `<ul class="frases"${copia ? ' aria-hidden="true"' : ' aria-label="O que o PU oferece"'}>${[...FRASES_FAIXA, ...FRASES_FAIXA].map(f => `<li>${f}</li>`).join('')}</ul>`;
   return `<div class="faixa-corre"><div class="trilho">${lista(false)}${lista(true)}</div></div>`;
@@ -493,25 +508,47 @@ function faixaQueCorre() {
 // Cerca de 40 px por segundo, qualquer que seja a largura das frases.
 function ajustarFaixa() { const trilho = $('.trilho'); if (trilho) trilho.style.animationDuration = `${Math.max(20, trilho.firstElementChild.offsetWidth / 40).toFixed(1)}s`; }
 window.addEventListener('resize', ajustarFaixa);
-function verEntrada() {
+function preencherLugar(nome, html, trocar = false) { const lugar = $(`#conteudo [data-lugar="${nome}"]`); if (!lugar) return null; if (trocar) { lugar.outerHTML = html; return null; } lugar.innerHTML = html; return lugar; }
+// Leva ao formulário (link "Entrar" do topo, #entrar, #criar-conta e ?criar-conta) e põe o foco no primeiro campo.
+function irAoFormulario() {
+  // Salto direto: a página é longa e a rolagem suave levaria mais de um segundo.
+  $('#entrar')?.scrollIntoView({block: 'start'});
+  $('#acesso input')?.focus({preventScroll: true});
+}
+function verEntrada({rolar = false} = {}) {
   menu.hidden = true; document.body.classList.add('sem-sessao');
-  const indisponivel = publico && !conexao.habilitado;
+  // Já na entrada, só o formulário muda: a questão de demonstração respondida e a posição da página ficam.
+  if (!$('#conteudo > .entrada:not([data-estatica])')) {
+    tela(MOLDE_ENTRADA || MOLDE_RESERVA);
+    preencherLugar('faixa-que-corre', faixaQueCorre(), true);
+    preencherLugar('provas', provasHtml());
+    desenharDemonstracao();
+    ajustarFaixa();
+  }
+  desenharFormulario();
+  if (rolar) irAoFormulario();
+}
+function desenharDemonstracao() {
   const q = DEMONSTRACAO;
-  tela(`<div class="entrada">
-<div class="faixa faixa-papel"><section class="apresentacao">
-<h1>Estude para o Enem uma questão por vez.${SELOS}</h1>
-<p class="lide">Você abre o PU e a questão do dia já está na tela. Responde, confere na hora e para quando quiser.</p>
-<ol class="passos">
-<li><strong>Questões oficiais do Enem</strong><span>Provas de 2024 e 2025, de todas as matérias, misturadas ou da matéria que você escolher.</span></li>
-<li><strong>O que você erra volta</strong><span>As erradas e os chutes reaparecem na revisão depois de 1, 3 e 7 dias.</span></li>
-<li><strong>Meta pequena por dia</strong><span>Cinco questões já contam. Você vê o que fez na semana e onde precisa treinar.</span></li>
-</ol>
-</section></div>
-${faixaQueCorre()}
-<div class="faixa faixa-azul"><section class="formulario" aria-labelledby="titulo-acesso">
-<h2 id="titulo-acesso">${cadastro ? 'Crie sua conta' : 'Entre para estudar'}</h2>
+  const lugar = preencherLugar('demonstracao', `<p class="rotulo">${escapar(q.materia)} · ${escapar(q.titulo)} · demonstração, não fica registrada</p>
+<div class="enunciado">${enunciadoHtml(q.enunciado, q)}</div>
+<fieldset id="demonstracao"><legend>Toque na alternativa que você marcaria</legend>${q.alternativas.map((a, i) => `<label class="alternativa"><input type="radio" name="demonstracao" value="${i}"><span class="letra">${letra(i)}</span><span class="texto">${escapar(a)}</span></label>`).join('')}</fieldset>
+<div id="retorno-demonstracao" class="retorno" aria-live="polite"></div>
+<p class="fonte"><a href="${escapar(q.fonte)}" target="_blank" rel="noopener noreferrer">Prova original no site do Inep</a></p>`);
+  if (!lugar) return;
+  $('#demonstracao').onchange = evento => {
+    const escolhida = Number(evento.target.value); const campo = $('#demonstracao');
+    $$('.alternativa', campo).forEach((alternativa, i) => { if (i === q.correta) alternativa.dataset.correcao = 'correta'; else if (i === escolhida) alternativa.dataset.correcao = 'errada'; });
+    campo.disabled = true;
+    $('#retorno-demonstracao').innerHTML = `<p class="${escolhida === q.correta ? 'acerto' : 'engano'}"><strong>${escolhida === q.correta ? 'Certa!' : `Não foi essa. A certa é a ${letra(q.correta)}.`}</strong> No PU, uma questão errada volta na revisão no dia seguinte, até você acertar com segurança.</p><button type="button" id="quero-conta">Criar minha conta</button>`;
+    $('#quero-conta').onclick = () => { cadastro = true; desenharFormulario(); irAoFormulario(); };
+  };
+}
+function desenharFormulario() {
+  const indisponivel = publico && !conexao.habilitado;
+  if (!preencherLugar('formulario', `<h3 id="titulo-acesso">${cadastro ? 'Crie sua conta' : 'Entre para estudar'}</h3>
 ${indisponivel ? '<p class="nota" role="status">O acesso público está em configuração. Ainda não é possível entrar.</p>' : ''}
-<form id="acesso">
+<form id="acesso" aria-labelledby="titulo-acesso">
 ${cadastro ? '<label for="nome">Como você se chama?</label><input id="nome" name="nome" autocomplete="name" minlength="2" maxlength="80" required>' : ''}
 <label for="email">E-mail</label><input id="email" name="email" type="${cadastro ? 'email' : 'text'}" autocomplete="username" maxlength="232" spellcheck="false" autocapitalize="none" required>
 <label for="senha">Senha</label><input id="senha" name="senha" type="password" autocomplete="${cadastro ? 'new-password' : 'current-password'}" minlength="${cadastro ? 12 : 1}" maxlength="128" required>
@@ -519,27 +556,8 @@ ${cadastro ? '<label for="nome">Como você se chama?</label><input id="nome" nam
 <button type="submit" ${indisponivel ? 'disabled' : ''}>${cadastro ? 'Criar conta' : 'Entrar'}</button>
 <p id="erro-acesso" class="erro-campo" role="alert"></p>
 </form>
-<button class="discreto troca" id="trocar" type="button">${cadastro ? 'Já tenho uma conta' : 'Quero criar uma conta'}</button>
-<p class="privacidade"><small>É gratuito. Guardamos seu nome, e-mail e respostas para mostrar seu progresso. Use dados de teste nesta versão inicial. <a href="#privacidade">Dados e segurança</a></small></p>
-</section></div>
-<div class="faixa faixa-areia"><section class="experimente" aria-labelledby="titulo-experimente">
-<h2 id="titulo-experimente">Experimente uma questão</h2>
-<p class="rotulo">${escapar(q.materia)} · ${escapar(q.titulo)} · demonstração, não fica registrada</p>
-<div class="enunciado">${enunciadoHtml(q.enunciado, q)}</div>
-<fieldset id="demonstracao"><legend>Toque na alternativa que você marcaria</legend>${q.alternativas.map((a, i) => `<label class="alternativa"><input type="radio" name="demonstracao" value="${i}"><span class="letra">${letra(i)}</span><span class="texto">${escapar(a)}</span></label>`).join('')}</fieldset>
-<div id="retorno-demonstracao" class="retorno" aria-live="polite"></div>
-<p class="fonte"><a href="${escapar(q.fonte)}" target="_blank" rel="noopener noreferrer">Prova original no site do Inep</a></p>
-</section></div>
-</div>`);
-  ajustarFaixa();
-  $('#trocar').onclick = () => { cadastro = !cadastro; verEntrada(); $('#acesso input').focus(); };
-  $('#demonstracao').onchange = evento => {
-    const escolhida = Number(evento.target.value); const campo = $('#demonstracao');
-    $$('.alternativa', campo).forEach((alternativa, i) => { if (i === q.correta) alternativa.dataset.correcao = 'correta'; else if (i === escolhida) alternativa.dataset.correcao = 'errada'; });
-    campo.disabled = true;
-    $('#retorno-demonstracao').innerHTML = `<p class="${escolhida === q.correta ? 'acerto' : 'engano'}"><strong>${escolhida === q.correta ? 'Certa!' : `Não foi essa. A certa é a ${letra(q.correta)}.`}</strong> No PU, uma questão errada volta na revisão no dia seguinte, até você acertar com segurança.</p><button type="button" id="quero-conta">Criar minha conta</button>`;
-    $('#quero-conta').onclick = () => { cadastro = true; verEntrada(); subir(); $('#acesso input').focus(); };
-  };
+<button class="discreto troca" id="trocar" type="button">${cadastro ? 'Já tenho uma conta' : 'Quero criar uma conta'}</button>`)) return;
+  $('#trocar').onclick = () => { cadastro = !cadastro; desenharFormulario(); $('#acesso input').focus(); };
   $('#acesso').onsubmit = async evento => {
     evento.preventDefault();
     const form = evento.currentTarget; const botao = $('button', form); const campoErro = $('#erro-acesso');
@@ -1043,14 +1061,21 @@ function verNota() { tela(''); PUSimulador.mostrar(conteudo); }
 
 // ---------- Navegação ----------
 const ROTAS = {'#estudar': verEstudo, '#progresso': verProgresso, '#simulado': verSimulado, '#nota': verNota, '#conta': verConta, '#privacidade': verPrivacidade};
-const APELIDOS = {'': '#estudar', '#inicio': '#estudar', '#questoes': '#estudar', '#dispositivos': '#conta'};
+const APELIDOS = {'': '#estudar', '#inicio': '#estudar', '#questoes': '#estudar', '#dispositivos': '#conta', '#entrar': '#estudar', '#criar-conta': '#estudar'};
+// Endereço para links de outras páginas: /?criar-conta abre a entrada já no cadastro (sem rota nova). Vale uma vez, ao abrir.
+let pedidoDeCadastro = new URLSearchParams(location.search).has('criar-conta');
 function navegar() {
   if (location.hash === '#principal') return;
   let destino = APELIDOS[location.hash] ?? location.hash;
   if (!ROTAS[destino]) destino = '#estudar';
   marcarMenu(destino);
   if (destino === '#privacidade') { verPrivacidade(); return subir(); }
-  if (!painel) return verEntrada();
+  const pedido = pedidoDeCadastro; pedidoDeCadastro = false;
+  if (!painel) {
+    // #entrar e #criar-conta levam ao formulário; ?criar-conta abre no cadastro.
+    if (location.hash === '#criar-conta' || (pedido && location.hash !== '#entrar')) cadastro = true; else if (location.hash === '#entrar') cadastro = false;
+    return verEntrada({rolar: pedido || ['#entrar', '#criar-conta'].includes(location.hash)});
+  }
   ROTAS[destino](); subir();
 }
 window.addEventListener('hashchange', navegar);
@@ -1095,5 +1120,5 @@ document.addEventListener('visibilitychange', () => {
     return;
   }
   tela('<p class="espera" role="status">Abrindo o PU…</p>');
-  atualizar().then(navegar).catch(e => { if (!painel) verEntrada(); if (e.status !== 401) erro(e); });
+  atualizar().then(navegar).catch(e => { if (!painel) navegar(); if (e.status !== 401) erro(e); });
 })();
