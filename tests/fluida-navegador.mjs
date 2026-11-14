@@ -68,6 +68,9 @@ const sql = comando => { const r = spawnSync('python3', ['-c', `import sqlite3,s
 const resultados = [];
 const chrome = await abrirChrome();
 let p = await chrome.novaPagina({largura: 390, altura: 844});
+// O tema automático depende da hora. Os itens que conferem as cores do diurno rodam num fuso em que agora é dia (das 9h às 15h).
+const FUSO_DE_DIA = Intl.supportedValuesOf('timeZone').find(f => { const h = Number(new Intl.DateTimeFormat('en-US', {timeZone: f, hour: 'numeric', hourCycle: 'h23'}).format(new Date())) % 24; return h >= 9 && h < 15; });
+await p.s('Emulation.setTimezoneOverride', {timezoneId: FUSO_DE_DIA});
 async function item(nome, passos) {
   try { await passos(); resultados.push([nome, true]); console.log('OK     ' + nome); }
   catch (e) { resultados.push([nome, false]); console.log('FALHA  ' + nome + ' :: ' + e.message.split('\n')[0]); if (CAPTURAS) await p.captura(path.join(CAPTURAS, 'falha-' + nome.replace(/[^a-z0-9]+/gi, '-').slice(0, 50) + '.png')).catch(() => {}); }
@@ -417,12 +420,239 @@ await item('dia de estudo segue o horário de Brasília em qualquer fuso do apar
     // Painel recém-chegado do servidor nunca é zerado pelo relógio do aparelho; só o guardado envelhece.
     igual(await p.avaliar('normalizar({estudo: {data: "2000-01-01", hoje: {respostas: 4, acertos: 2}, semana: [4,0,0,0,0,0,0], diaDaSemana: 0, revisao: {vencidas: [], caderno: 0}}}).estudo.hoje.respostas'), 4, 'dado do servidor preservado');
     igual(await p.avaliar('normalizar({estudo: {data: "2000-01-01", hoje: {respostas: 4, acertos: 2}, semana: [4,0,0,0,0,0,0], diaDaSemana: 0, revisao: {vencidas: [], caderno: 0}}}, true).estudo.hoje.respostas'), 0, 'painel guardado vira o dia');
-  } finally { await p.s('Emulation.setTimezoneOverride', {timezoneId: ''}); }
+  } finally { await p.s('Emulation.setTimezoneOverride', {timezoneId: ''}); await p.s('Emulation.setTimezoneOverride', {timezoneId: FUSO_DE_DIA}); }
 });
 await item('painel pedido antes de uma resposta não sobrescreve o resultado dela', async () => {
   const antes = await p.avaliar('painel.progresso.total');
   await p.avaliar('(async () => { const pedido = atualizar(); aplicarResultado({progresso: {total: 77, acertos: 1}}); await pedido; })()');
   igual(await p.avaliar('painel.progresso.total'), antes, 'painel velho descartado e pedido de novo');
+});
+// ---------- Tema (automático, diurno, noturno, fuso) e sons de acerto e erro (frente funcoes, 14/11/2026) ----------
+const PRETO = 'rgb(0, 0, 0)'; const BRANCO = 'rgb(255, 255, 255)';
+const fundoDaPagina = () => p.avaliar('getComputedStyle(document.documentElement).backgroundColor');
+const temaNaPagina = () => p.avaliar('document.documentElement.dataset.tema ?? null');
+const escolherTema = async valor => { await p.clicar(`input[name="tema"][value="${valor}"]`); await p.esperar(`prefs.tema === "${valor}"`, 4000, 'tema ' + valor); };
+const abrirConta = async () => { await p.avaliar('location.hash = "#conta"'); await p.esperar('document.querySelector("#fuso optgroup[data-outros]") && document.querySelector("#sons")', 8000, 'tela da conta com a lista de fusos'); };
+const seta = async key => { for (const type of ['keyDown', 'keyUp']) await p.s('Input.dispatchKeyEvent', {type, key, code: key, windowsVirtualKeyCode: {ArrowLeft: 37, ArrowRight: 39}[key]}); };
+const trocarFuso = async fuso => { await p.s('Emulation.setTimezoneOverride', {timezoneId: ''}).catch(() => {}); await p.s('Emulation.setTimezoneOverride', {timezoneId: fuso}); };
+// Relógio simulado: só o Date da página anda deslocado; os temporizadores continuam os de verdade.
+const relogioFalso = iso => p.avaliar(`(() => { const Real = window.__DataReal || Date; window.__DataReal = Real; const desvio = Date.parse(${JSON.stringify(iso)}) - Real.now();
+  window.Date = class extends Real { constructor(...a) { if (a.length) super(...a); else super(Real.now() + desvio); } static now() { return Real.now() + desvio; } }; })()`);
+const relogioReal = () => p.avaliar('(() => { if (window.__DataReal) { window.Date = window.__DataReal; delete window.__DataReal; } })()');
+// Depois de recarregar, qualquer tela de dentro desenhada serve (a página recarrega no endereço em que estava).
+const estudoPronto = () => p.esperar('!document.body.classList.contains("sem-sessao") && document.querySelector("#conteudo").childElementCount && !document.querySelector(".espera")', 8000, 'tela de dentro');
+const escolherFuso = fuso => p.avaliar(`(() => { const s = document.querySelector("#fuso"); s.value = ${JSON.stringify(fuso)}; s.dispatchEvent(new Event("change", {bubbles: true})); return prefs.fuso; })()`);
+
+await item('tema: padrão automático, fuso detectado do navegador e, sem ele, o relógio do aparelho', async () => {
+  await abrirConta();
+  igual(await p.avaliar('prefs.tema'), 'automatico', 'padrão');
+  igual(await p.avaliar('document.querySelector("input[name=tema]:checked").value'), 'automatico', 'opção marcada');
+  igual(await p.avaliar('document.querySelector("#bloco-fuso").hidden'), false, 'fuso visível no automático');
+  igual(await p.avaliar('fusoDoNavegador()'), FUSO_DE_DIA, 'fuso do navegador');
+  igual(await p.avaliar('document.querySelector("#fuso").value'), '', 'segue o do navegador');
+  certo((await p.texto('#fuso option')).includes(FUSO_DE_DIA.replace(/_/g, ' ')), 'primeira opção com o fuso detectado');
+  certo(new RegExp(`^Agora são \\d{2}:\\d{2} em ${FUSO_DE_DIA.replace(/_/g, ' ').replace(/[.*+?^${}()|[\]\\/]/g, '\\$&')} \\(UTC`).test(await p.texto('#hora-fuso')), 'hora no fuso: ' + await p.texto('#hora-fuso'));
+  igual(await temaNaPagina(), 'diurno', 'dia no fuso do teste');
+  await trocarFuso('Asia/Tokyo');
+  try { igual(await p.avaliar('fusoDoNavegador()'), 'Asia/Tokyo', 'Tóquio detectado'); } finally { await trocarFuso(FUSO_DE_DIA); }
+  const semFuso = await p.avaliar(`(() => { const original = Intl.DateTimeFormat.prototype.resolvedOptions;
+    Intl.DateTimeFormat.prototype.resolvedOptions = function () { return {...original.call(this), timeZone: undefined}; };
+    try { const agora = new Date(); return {fuso: fusoDoNavegador(), hora: horaNoFuso(fusoDoNavegador(), agora).hora === agora.getHours(), opcao: opcoesDeFuso().includes("Relógio deste aparelho")}; }
+    finally { Intl.DateTimeFormat.prototype.resolvedOptions = original; } })()`);
+  igual(semFuso, {fuso: '', hora: true, opcao: true}, 'relógio do aparelho');
+  const custo = await p.avaliar('(() => { const t = performance.now(); opcoesDeFuso(); return performance.now() - t; })()');
+  certo(custo < 20, 'lista curta de fusos em menos de 20 ms, veio ' + custo.toFixed(1));
+  igual(await p.avaliar(`(() => { prefs.fuso = 'Asia/Tokyo'; verConta(); const s = document.querySelector('#fuso'); const antes = s.value; completarFusos(s); const r = [antes, s.value, s.querySelectorAll('option[value="Asia/Tokyo"]').length]; prefs.fuso = ''; verConta(); return r; })()`), ['Asia/Tokyo', 'Asia/Tokyo', 1], 'fuso escolhido mantido ao completar a lista');
+});
+await item('tema: noturno pinta o fundo de preto e diurno de branco; fuso só no automático; teclado e leitor de tela', async () => {
+  await abrirConta(); await escolherTema('noturno');
+  igual(await temaNaPagina(), 'noturno', 'tema'); igual(await fundoDaPagina(), PRETO, 'fundo preto');
+  igual(await p.avaliar('getComputedStyle(document.querySelector(".topo")).backgroundColor'), PRETO, 'topo preto');
+  igual(await p.avaliar('getComputedStyle(document.documentElement).colorScheme'), 'dark', 'color-scheme escuro');
+  igual(await p.avaliar('document.querySelector("meta[name=theme-color]").content'), '#000000', 'theme-color');
+  igual(await p.avaliar('document.querySelector("#bloco-fuso").hidden'), true, 'fuso escondido no noturno');
+  await escolherTema('diurno');
+  igual(await fundoDaPagina(), BRANCO, 'fundo branco'); igual(await p.avaliar('getComputedStyle(document.documentElement).colorScheme'), 'light', 'color-scheme claro');
+  igual(await p.avaliar('document.querySelector("meta[name=theme-color]").content'), '#FFFFFF', 'theme-color diurno');
+  igual(await p.avaliar('document.querySelector("#bloco-fuso").hidden'), true, 'fuso escondido no diurno');
+  // Grupo de rádio: as setas trocam a opção e o tema entra na hora.
+  await p.avaliar('document.querySelector("input[name=tema]:checked").focus()'); await seta('ArrowRight');
+  await p.esperar('prefs.tema === "noturno"', 3000, 'seta para a direita'); igual(await fundoDaPagina(), PRETO, 'noturno pelo teclado');
+  await seta('ArrowLeft'); await seta('ArrowLeft'); await p.esperar('prefs.tema === "automatico"', 3000, 'setas para a esquerda');
+  igual(await p.avaliar('document.querySelector("#bloco-fuso").hidden'), false, 'fuso de volta no automático');
+  igual(await nomeAcessivel('.escolha-tema'), 'Tema', 'grupo com nome'); igual(await nomeAcessivel('input[name="tema"][value="noturno"]'), 'Noturno', 'opção com nome');
+  igual(await nomeAcessivel('#fuso'), 'Fuso horário', 'seletor de fuso com nome');
+  igual(await nomeAcessivel('#sons'), 'Sons de acerto e erro', 'interruptor com nome');
+  igual(await p.avaliar('[document.querySelector("#sons").getAttribute("role"), document.querySelector("#sons").getAttribute("aria-checked")]'), ['switch', 'true'], 'interruptor ligado por padrão');
+  certo(await p.semRolagemLateral(), 'sem rolagem lateral');
+});
+await item('tema automático: relógio simulado ao meio-dia e às 22h em dois fusos, troca na virada sem recarregar', async () => {
+  await abrirConta();
+  try {
+    for (const [fuso, instante, esperado, hora] of [['America/Sao_Paulo', '2026-11-14T15:00:00Z', 'diurno', '12:00'], ['America/Sao_Paulo', '2026-11-15T01:00:00Z', 'noturno', '22:00'], ['Asia/Tokyo', '2026-11-14T03:00:00Z', 'diurno', '12:00'], ['Asia/Tokyo', '2026-11-14T13:00:00Z', 'noturno', '22:00']]) {
+      igual(await escolherFuso(fuso), fuso, 'fuso escolhido'); await relogioFalso(instante); await p.avaliar('(aplicarTema(), mostrarHoraDoFuso())');
+      igual(await temaNaPagina(), esperado, `${fuso} às ${hora}`); igual(await fundoDaPagina(), esperado === 'diurno' ? BRANCO : PRETO, `cor em ${fuso} às ${hora}`);
+      certo((await p.texto('#hora-fuso')).startsWith(`Agora são ${hora} em ${fuso.replace(/_/g, ' ')}`), 'hora mostrada: ' + await p.texto('#hora-fuso'));
+    }
+    // Virada das 18h em São Paulo: a página não recarrega e o tema troca sozinho.
+    await escolherFuso('America/Sao_Paulo'); await p.avaliar('window.__semRecarregar = 1');
+    await relogioFalso('2026-11-14T20:59:58.500Z'); await p.avaliar('aplicarTema()'); igual(await temaNaPagina(), 'diurno', 'antes das 18h');
+    await p.esperar('document.documentElement.dataset.tema === "noturno"', 4000, 'troca às 18h');
+    igual(await p.avaliar('window.__semRecarregar'), 1, 'sem recarregar'); certo((await p.texto('#hora-fuso')).startsWith('Agora são 18:00'), 'hora atualizada na virada');
+    // Aba que volta a ficar visível confere de novo (o temporizador pode ter dormido com o aparelho).
+    await relogioFalso('2026-11-14T15:00:00Z'); await p.avaliar('(clearTimeout(relogioTema), document.dispatchEvent(new Event("visibilitychange")))');
+    igual(await temaNaPagina(), 'diurno', 'conferido ao voltar para a aba');
+  } finally { await relogioReal(); await escolherFuso(''); await p.avaliar('aplicarTema()'); }
+  igual(await p.avaliar('prefs.fuso'), '', 'volta ao fuso do navegador');
+});
+await item('tema: preferência guardada por conta, entra antes do primeiro quadro e a entrada fica sem tema', async () => {
+  await abrirConta(); await escolherTema('noturno');
+  igual(await p.avaliar('JSON.parse(localStorage.getItem("pu.prefs.v1." + painel.conta.id)).tema'), 'noturno', 'guardada por conta');
+  const {identifier} = await p.s('Page.addScriptToEvaluateOnNewDocument', {source: `(() => {
+    const registrar = nome => { if (window[nome]) return; const raiz = document.documentElement; window[nome] = {tema: raiz.dataset.tema || null, fundo: raiz.isConnected ? getComputedStyle(raiz).backgroundColor : null}; };
+    requestAnimationFrame(() => registrar('__primeiroQuadro'));
+    new MutationObserver(() => { const c = document.querySelector('#conteudo'); if (c && c.childElementCount) registrar('__primeiraTela'); }).observe(document, {childList: true, subtree: true});
+  })()`});
+  try { await p.recarregar(); await estudoPronto(); } finally { await p.s('Page.removeScriptToEvaluateOnNewDocument', {identifier}); }
+  igual(await p.avaliar('window.__primeiraTela'), {tema: 'noturno', fundo: PRETO}, 'primeira tela de dentro já no noturno');
+  igual(await p.avaliar('window.__primeiroQuadro'), {tema: 'noturno', fundo: PRETO}, 'primeiro quadro sem clarão');
+  igual(await temaNaPagina(), 'noturno', 'persiste ao recarregar');
+  await abrirConta(); await p.clicar('#sair'); await p.esperar('document.querySelector("#acesso")');
+  igual(await temaNaPagina(), null, 'entrada sem tema'); igual(await p.avaliar('getComputedStyle(document.documentElement).colorScheme'), 'light', 'entrada clara');
+  igual(await p.avaliar('getComputedStyle(document.querySelector(".faixa-papel")).backgroundColor'), BRANCO, 'faixa da entrada igual');
+  igual(await p.avaliar('document.querySelector("meta[name=theme-color]").content'), '#FBFBFA', 'theme-color da entrada');
+  await cadastrar('Terceira');
+  igual(await p.avaliar('prefs.tema'), 'automatico', 'conta nova no padrão'); igual(await temaNaPagina(), 'diurno', 'conta nova no automático de dia');
+  await abrirConta(); await p.clicar('#sair'); await p.esperar('document.querySelector("#acesso")');
+  await p.preencher('#email', 'segunda@example.com'); await p.preencher('#senha', 'Senha longa de teste 123!'); await p.clicar('#acesso button[type=submit]'); await estudoPronto();
+  igual(await p.avaliar('prefs.tema'), 'noturno', 'a outra conta volta no noturno'); igual(await temaNaPagina(), 'noturno', 'noturno de volta');
+});
+// Contraste medido no próprio Chrome: pares por variável e varredura de todo texto visível de cada tela.
+const PARES_NOTURNO = [
+  ...['--fundo', '--painel', '--cartao', '--folha', '--barra', '--suave', '--verde-fundo', '--vermelho-fundo', '--amarelo-fundo', '--azul-fundo'].flatMap(f => [['--texto', f], ['--secundario', f]]),
+  ['--texto-invertido', '--destaque'], ['--texto-invertido', '--destaque-passar'], ['--texto-invertido', '--texto'], ['--texto-invertido', '--esperando'],
+  ['--texto-acerto', '--verde-fundo'], ['--texto-engano', '--vermelho-fundo'], ['--texto-dica', '--azul-fundo'], ['--texto-revisao', '--amarelo-fundo'],
+  ['--verde', '--verde-fundo'], ['--vermelho', '--vermelho-fundo'], ['--verde', '--fundo'], ['--vermelho', '--fundo'], ['--azul', '--fundo'],
+  ['--texto-sobre-cor', '--verde'], ['--texto-sobre-cor', '--vermelho'],
+  ['--foco', '--fundo'], ['--foco', '--folha'], ['--foco', '--cartao'], ['--foco', '--suave'],
+  ['--texto', '--fundo'], ['--linha', '--fundo'], ['--linha', '--folha'], ['--fio', '--fundo'], ['--fio', '--folha'], ['--fio', '--cartao'], ['--divisa', '--folha'],
+  ['--verde', '--folha'], ['--vermelho', '--folha'], ['--amarelo', '--folha'], ['--amarelo', '--cartao']
+];
+const CONTA_CONTRASTE = `const cor = t => (t.match(/[\\d.]+/g) || []).map(Number);
+  const lum = ([r, g, b]) => [r, g, b].map(c => { c /= 255; return c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4; }).reduce((s, c, i) => s + c * [0.2126, 0.7152, 0.0722][i], 0);
+  const razao = (a, b) => { const [x, y] = [lum(a), lum(b)].sort((m, n) => n - m); return Math.round((x + 0.05) / (y + 0.05) * 100) / 100; };`;
+const varrerContraste = () => p.avaliar(`(() => { ${CONTA_CONTRASTE}
+  const fundo = e => { for (let x = e; x; x = x.parentElement) { const v = cor(getComputedStyle(x).backgroundColor); if (v.length === 3 || v[3] > 0.5) return v.slice(0, 3); } return [255, 255, 255]; };
+  const fracos = [];
+  for (const e of document.querySelectorAll('body *')) {
+    if (!e.getClientRects().length || e.closest('.oculto, [hidden], button:disabled, option, optgroup, script, style')) continue;
+    if (![...e.childNodes].some(n => n.nodeType === 3 && n.textContent.trim())) continue;
+    const c = getComputedStyle(e); if (c.visibility !== 'visible' || Number(c.opacity) < 1) continue;
+    const r = razao(cor(c.color).slice(0, 3), fundo(e));
+    if (r < 4.5) fracos.push(e.tagName + '.' + e.className + ' "' + e.textContent.trim().slice(0, 30) + '" ' + r);
+  }
+  return fracos; })()`);
+await item('tema noturno: contraste AA (4,5:1) em todo par de texto e fundo, com acerto, erro, foco e bordas', async () => {
+  igual(await temaNaPagina(), 'noturno', 'no noturno');
+  const medidas = await p.avaliar(`(() => { ${CONTA_CONTRASTE}
+    const sonda = document.createElement('span'); document.body.append(sonda);
+    const rgb = v => { sonda.style.color = 'var(' + v + ')'; return cor(getComputedStyle(sonda).color).slice(0, 3); };
+    const r = ${JSON.stringify(PARES_NOTURNO)}.map(([a, b]) => [a, b, razao(rgb(a), rgb(b))]); sonda.remove(); return r; })()`);
+  igual(medidas.filter(([, , v]) => v < 4.5), [], 'pares abaixo de 4,5:1');
+  certo(medidas.length === PARES_NOTURNO.length, 'todos os pares medidos');
+  // Questão corrigida com erro (certa e escolhida marcadas), depois com acerto, e as telas de passagem.
+  await p.avaliar('location.hash = "#estudar"'); await abrir(9); await marcar(9, errada(9)); await p.clicar('#conferir'); await p.esperar('document.querySelector("#ver-resposta")');
+  igual(await varrerContraste(), [], 'segunda tentativa'); await p.clicar('#ver-resposta'); await p.esperar('document.querySelector("#proxima")'); await dormir(450);
+  igual(await varrerContraste(), [], 'questão corrigida com erro');
+  await abrir(10); await marcar(10, q(10).correta); await p.clicar('#conferir'); await p.esperar('document.querySelector("#proxima")'); await dormir(450);
+  igual(await varrerContraste(), [], 'questão corrigida com acerto');
+  for (const destino of ['#progresso', '#simulado', '#nota', '#conta', '#privacidade']) { await p.avaliar(`location.hash = "${destino}"`); await dormir(500); igual(await varrerContraste(), [], 'texto em ' + destino); }
+  await abrirConta(); await p.avaliar('document.querySelector("input[name=tema]:checked").focus()'); await seta('ArrowRight'); await seta('ArrowLeft');
+  const foco = await p.avaliar(`(() => { ${CONTA_CONTRASTE} const e = document.querySelector('.opcao-tema:has(input:focus-visible)'); if (!e) return null; const c = getComputedStyle(e); return [c.outlineStyle, razao(cor(c.outlineColor), cor(getComputedStyle(document.documentElement).backgroundColor))]; })()`);
+  certo(foco && foco[0] === 'solid' && foco[1] >= 4.5, 'contorno de foco visível e com contraste: ' + JSON.stringify(foco));
+  await escolherTema('noturno');
+});
+await item('tema noturno: figura da prova sobre cartão claro, sem inverter as cores', async () => {
+  await p.avaliar('location.hash = "#estudar"'); await abrir(5);
+  await p.esperar('document.querySelector(".figura img")?.naturalWidth === 120', 8000, 'figura carregada');
+  const figura = await p.avaliar('(() => { const c = getComputedStyle(document.querySelector(".figura img")); return [c.backgroundColor, parseFloat(c.paddingTop) > 0, c.filter]; })()');
+  igual(figura, [BRANCO, true, 'none'], 'cartão branco, sem filtro');
+});
+await item('sons: acerto e erro na correção imediata; nada no simulado, na revisão dele nem com o interruptor desligado', async () => {
+  await p.avaliar(`(() => { window.__sons = []; window.__chamadas = 0;
+    const desenhar = som.desenhar, tocar = som.tocar;
+    som.desenhar = (contexto, tipo, ...resto) => { window.__sons.push(tipo); return desenhar.call(som, contexto, tipo, ...resto); };
+    som.tocar = tipo => { window.__chamadas++; return tocar.call(som, tipo); }; })()`);
+  const sons = () => p.avaliar('window.__sons');
+  await p.avaliar('location.hash = "#estudar"');
+  await abrir(11); await marcar(11, q(11).correta); await p.clicar('#conferir'); await p.esperar('document.querySelector("#proxima")');
+  igual(await sons(), ['acerto'], 'acerto');
+  await abrir(12); await marcar(12, errada(12)); await p.clicar('#conferir'); await p.esperar('document.querySelector("#ver-resposta")');
+  igual(await sons(), ['acerto', 'erro'], 'erro na primeira tentativa');
+  await marcar(12, q(12).correta); await p.esperar('document.querySelector("#proxima")');
+  igual(await sons(), ['acerto', 'erro', 'acerto'], 'acerto na segunda tentativa');
+  await abrir(13); await marcar(13, errada(13)); await p.clicar('#conferir'); await p.clicar('#ver-resposta'); await p.esperar('document.querySelector("#proxima")');
+  igual(await sons(), ['acerto', 'erro', 'acerto', 'erro'], '"Ver resposta" não toca de novo');
+  await abrir(21); await marcar(21, q(21).correta); await marcar(22, errada(22)); await p.clicar('#conferir'); await p.esperar('document.querySelector("#proxima")');
+  igual((await sons()).at(-1), 'erro', 'conjunto com uma errada');
+  // Interruptor desligado: nada toca; ligar de novo toca o de acerto como amostra.
+  await abrirConta(); await p.clicar('#sons');
+  igual(await p.avaliar('[document.querySelector("#sons").getAttribute("aria-checked"), JSON.parse(localStorage.getItem("pu.prefs.v1." + painel.conta.id)).sons]'), ['false', false], 'desligado e guardado');
+  const antes = (await sons()).length;
+  await p.avaliar('location.hash = "#estudar"'); await abrir(14); await marcar(14, errada(14)); await p.clicar('#conferir'); await p.clicar('#ver-resposta'); await p.esperar('document.querySelector("#proxima")');
+  igual((await sons()).length, antes, 'sem som com o interruptor desligado');
+  await abrirConta(); await p.clicar('#sons'); igual((await sons()).slice(antes), ['acerto'], 'amostra ao ligar');
+  // Simulado: correção só no fim, sem som; rever uma questão do resultado também não toca.
+  const chamadas = await p.avaliar('window.__chamadas'); const tocados = (await sons()).length;
+  await p.avaliar('location.hash = "#simulado"'); await p.clicar('#comecar'); await p.esperar('document.querySelector(".simulado-topo")'); await questaoPronta();
+  for (let n = 0; n < 10; n++) { const id = await idAtual(); await marcar(id, n % 2 ? q(id).correta : errada(id)); await p.clicar('#conferir'); await p.esperar(`document.querySelector(".resultado-simulado, #tentar") || ${trocou}(${id})`, 12000, 'troca no simulado'); }
+  await p.esperar('document.querySelector(".resultado-simulado, #tentar")', 12000, 'resultado'); if (await p.existe('#tentar')) await p.clicar('#tentar');
+  await p.esperar('document.querySelector(".resultado-simulado")', 12000, 'resultado do simulado');
+  await p.clicar('.linha-resultado[data-acerto=false] [data-rever]'); await p.esperar('document.querySelector("#voltar-resultado")');
+  igual([await p.avaliar('window.__chamadas'), (await sons()).length], [chamadas, tocados], 'simulado e revisão sem som');
+  await p.clicar('#voltar-resultado'); await p.esperar('document.querySelector(".resultado-simulado")');
+  // Navegador sem Web Audio: silêncio, sem erro.
+  igual(await p.avaliar(`(() => { const guardado = [window.AudioContext, window.webkitAudioContext, som.contexto, som.saida]; window.AudioContext = undefined; window.webkitAudioContext = undefined; som.contexto = null; som.saida = null;
+    try { som.preparar(); return [som.contexto, som.tocar('acerto')]; } finally { [window.AudioContext, window.webkitAudioContext, som.contexto, som.saida] = guardado; } })()`), [null, false], 'sem Web Audio');
+});
+// Caso real (teste-só-com-falso): o contexto nasce num clique de verdade, roda no Chrome sem janela e o som sai na saída de áudio.
+await item('som de verdade: contexto de áudio rodando no Chrome sem janela, com sinal na saída e cada som abaixo de 400 ms', async () => {
+  await p.recarregar(); await estudoPronto();
+  igual(await p.avaliar('som.contexto'), null, 'contexto só depois do gesto');
+  await p.avaliar(`(() => { const preparar = som.preparar; window.__pico = 0;
+    som.preparar = () => { preparar(); if (som.contexto && !window.__analisador) { const a = som.contexto.createAnalyser(); a.fftSize = 2048; som.saida.connect(a); window.__analisador = a;
+      const dados = new Float32Array(a.fftSize); const inicio = performance.now();
+      const medir = () => { a.getFloatTimeDomainData(dados); for (const v of dados) window.__pico = Math.max(window.__pico, Math.abs(v)); if (performance.now() - inicio < 4000) setTimeout(medir, 8); }; medir(); } }; })()`);
+  await abrir(15);
+  const centro = async seletor => p.avaliar(`(() => { const e = document.querySelector(${JSON.stringify(seletor)}); e.scrollIntoView({block: "center"}); const r = e.getBoundingClientRect(); return {x: r.x + r.width / 2, y: r.y + r.height / 2}; })()`);
+  const tocarNaTela = async seletor => { const {x, y} = await centro(seletor); for (const type of ['mousePressed', 'mouseReleased']) await p.s('Input.dispatchMouseEvent', {type, x, y, button: 'left', clickCount: 1}); };
+  await tocarNaTela(`label.alternativa:has(input[name="alternativa-15"][value="${q(15).correta}"])`); await p.esperar('!document.querySelector("#conferir").disabled', 3000, 'Conferir liberado');
+  await tocarNaTela('#conferir'); await p.esperar('document.querySelector("#proxima")');
+  await p.esperar('window.__pico > 0.01', 4000, 'sinal na saída de áudio');
+  const real = await p.avaliar('({estado: som.contexto.state, tempo: som.contexto.currentTime > 0, pico: Math.round(window.__pico * 1000) / 1000})');
+  igual([real.estado, real.tempo], ['running', true], 'contexto rodando'); certo(real.pico < 0.4, 'volume moderado na saída: ' + real.pico);
+  const medidas = await p.avaliar(`(async () => { const r = {}; for (const tipo of ["acerto", "erro"]) { const c = new OfflineAudioContext(1, 48000, 48000); som.desenhar(c, tipo, c.destination, 0); const d = (await c.startRendering()).getChannelData(0);
+    let ultimo = 0, pico = 0; d.forEach((v, i) => { const a = Math.abs(v); if (a > 0.001) ultimo = i; if (a > pico) pico = a; }); r[tipo] = {duracao: ultimo / 48000, pico}; } return r; })()`);
+  for (const tipo of ['acerto', 'erro']) { certo(medidas[tipo].duracao > 0.15 && medidas[tipo].duracao < 0.4, `${tipo} com ${medidas[tipo].duracao} s`); certo(medidas[tipo].pico > 0.03 && medidas[tipo].pico < 0.35, `${tipo} com pico ${medidas[tipo].pico}`); }
+  const notas = await p.avaliar('[SONS.acerto.notas.map(n => n[0]), SONS.erro.notas.map(n => n[0])]');
+  certo(notas[0][1] > notas[0][0], 'acerto sobe'); certo(Math.max(...notas[1]) < Math.min(...notas[0]), 'erro mais grave que o acerto');
+});
+await item('capturas da conta e da questão corrigida em diurno e noturno, em 390, 768 e 1440', async () => {
+  for (const tema of ['diurno', 'noturno']) {
+    await abrirConta(); await escolherTema(tema);
+    for (const largura of [390, 768, 1440]) {
+      await p.tamanho(largura, largura < 800 ? 844 : 900); await abrirConta(); await dormir(500);
+      certo(await p.semRolagemLateral(), `conta sem rolagem lateral em ${largura}`);
+      if (CAPTURAS) await p.captura(path.join(CAPTURAS, `tema-conta-${tema}-${largura}.png`));
+      await p.avaliar('location.hash = "#estudar"'); const id = [16, 17, 18, 19, 20, 23, 24][['diurno', 'noturno'].indexOf(tema) * 3 + [390, 768, 1440].indexOf(largura)];
+      await abrir(id); await marcar(id, errada(id)); await p.clicar('#conferir'); await p.clicar('#ver-resposta'); await p.esperar('document.querySelector("#proxima")'); await dormir(500);
+      certo(await p.semRolagemLateral(), `correção sem rolagem lateral em ${largura}`);
+      if (CAPTURAS) await p.captura(path.join(CAPTURAS, `tema-correcao-${tema}-${largura}.png`));
+    }
+  }
+  await p.tamanho(390, 844); await abrirConta(); await escolherTema('automatico'); await dormir(300);
+  certo(await p.avaliar('!document.querySelector("#bloco-fuso").hidden'), 'fuso no automático');
+  if (CAPTURAS) await p.captura(path.join(CAPTURAS, 'tema-conta-automatico-390.png'));
 });
 const errosLocais = p.erros.filter(e => !/favicon|401 \(Unauthorized\)|ERR_INTERNET_DISCONNECTED|ERR_BLOCKED_BY_CLIENT|Failed to fetch/.test(e));
 await item('nenhum erro de JavaScript nem recurso bloqueado pela política de conteúdo', async () => { igual(errosLocais, [], 'erros'); });
@@ -430,6 +660,7 @@ await item('nenhum erro de JavaScript nem recurso bloqueado pela política de co
 // ---------- Entrada pública: GitHub Pages + intermediário (simulado dentro do Chrome) ----------
 await p.fechar();
 p = await chrome.novaPagina({largura: 390, altura: 844});
+await p.s('Emulation.setTimezoneOverride', {timezoneId: FUSO_DE_DIA});
 const fila = new Map(); let pedidosPublicos = 0;
 await p.s('Fetch.enable', {patterns: [{urlPattern: INTERMEDIARIO + '/*'}]});
 const cors = [{name: 'Access-Control-Allow-Origin', value: URL_PUBLICA}, {name: 'Access-Control-Allow-Headers', value: 'Content-Type, Authorization'}, {name: 'Access-Control-Allow-Methods', value: 'GET, POST, OPTIONS'}, {name: 'Content-Type', value: 'application/json'}];
