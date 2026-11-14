@@ -35,12 +35,17 @@ if (publico) {
   else guardarSessao('');
 }
 // Preferências ficam separadas por conta, para não passarem de uma pessoa a outra no mesmo aparelho.
-const PREFS_PADRAO = {meta: 5, foco: null, alvo: null, dicaChute: false, atalhos: true, semCronometro: false};
+// tema: automatico, diurno ou noturno; fuso: vazio segue o do navegador; sons: acerto e erro na correção imediata.
+const PREFS_PADRAO = {meta: 5, foco: null, alvo: null, dicaChute: false, atalhos: true, semCronometro: false, tema: 'automatico', fuso: '', sons: true};
 let prefs = {...PREFS_PADRAO};
 const chavePrefs = () => `${CHAVES.prefs}.${painel?.conta?.id ?? 0}`;
 function carregarPrefs() {
   prefs = {...PREFS_PADRAO, ...(guarda.ler(chavePrefs()) || {})};
   if (![3, 5, 10, 20].includes(prefs.meta)) prefs.meta = 5;
+  if (!Object.hasOwn(TEMAS, prefs.tema)) prefs.tema = 'automatico';
+  if (prefs.fuso && !fusoValido(prefs.fuso)) prefs.fuso = '';
+  // O tema entra aqui, antes de qualquer tela de dentro ser desenhada.
+  aplicarTema();
 }
 const salvarPrefs = () => { if (painel?.conta) guarda.gravar(chavePrefs(), prefs); };
 
@@ -53,6 +58,139 @@ const estado = {modo: 'misturado', primeira: null, puladas: new Set(), feitasSes
 let simulado = guarda.ler(CHAVES.simulado);
 const enviosSimulado = new Map();   // id → envio em andamento; só na memória, nunca gravado
 let relogio = null;
+
+// ---------- Tema das telas de dentro: automático, diurno ou noturno (pedido de Dominique, 14/11/2026) ----------
+// Só com a conta aberta: a página de entrada não muda. O tema vai em data-tema no <html> e as cores saem das variáveis
+// do bloco de temas no fim do estilo.css. No automático, diurno das 6h às 18h e noturno das 18h às 6h no fuso escolhido.
+// Fuso padrão: o do navegador; sem ele, o relógio do aparelho. O horário de verão fica por conta do Intl.
+const TEMAS = {automatico: 'Automático', diurno: 'Diurno', noturno: 'Noturno'};
+const COR_DA_BARRA = {diurno: '#FFFFFF', noturno: '#000000'};
+const corDaBarra = document.querySelector('meta[name="theme-color"]');
+const corDaEntrada = corDaBarra?.getAttribute('content') || '';
+let relogioTema = null;
+function fusoValido(fuso) {
+  if (!fuso || typeof fuso !== 'string') return false;
+  try { new Intl.DateTimeFormat('en-US', {timeZone: fuso}); return true; } catch { return false; }
+}
+function fusoDoNavegador() {
+  try { const fuso = Intl.DateTimeFormat().resolvedOptions().timeZone; return fusoValido(fuso) ? fuso : ''; } catch { return ''; }
+}
+// Fuso em vigor: o escolhido nas configurações; senão o do navegador. Vazio quer dizer o relógio do aparelho.
+const fusoEmVigor = () => fusoValido(prefs.fuso) ? prefs.fuso : fusoDoNavegador();
+function horaNoFuso(fuso, agora = new Date()) {
+  if (fuso) {
+    try {
+      const partes = new Intl.DateTimeFormat('en-US', {timeZone: fuso, hour: 'numeric', minute: 'numeric', hourCycle: 'h23'}).formatToParts(agora);
+      const valor = tipo => Number(partes.find(p => p.type === tipo)?.value);
+      if (Number.isFinite(valor('hour'))) return {hora: valor('hour') % 24, minuto: valor('minute')};
+    } catch { /* cai no relógio do aparelho */ }
+  }
+  return {hora: agora.getHours(), minuto: agora.getMinutes()};
+}
+function temaEmVigor(agora = new Date()) {
+  if (prefs.tema === 'diurno' || prefs.tema === 'noturno') return prefs.tema;
+  const {hora} = horaNoFuso(fusoEmVigor(), agora);
+  return hora >= 6 && hora < 18 ? 'diurno' : 'noturno';
+}
+// Deslocamento do fuso em relação ao UTC, para conferir na tela ("UTC−3").
+function deslocamento(fuso, agora = new Date()) {
+  let minutos = -agora.getTimezoneOffset();
+  if (fuso) {
+    try {
+      const nome = new Intl.DateTimeFormat('en-US', {timeZone: fuso, timeZoneName: 'shortOffset'}).formatToParts(agora).find(p => p.type === 'timeZoneName')?.value || '';
+      const achado = nome.match(/^GMT(?:([+-])(\d{1,2})(?::(\d{2}))?)?$/);
+      if (achado) minutos = achado[1] ? (achado[1] === '-' ? -1 : 1) * (Number(achado[2]) * 60 + Number(achado[3] || 0)) : 0;
+    } catch { /* fica o do aparelho */ }
+  }
+  const h = Math.floor(Math.abs(minutos) / 60); const m = Math.abs(minutos) % 60;
+  return `UTC${minutos < 0 ? '−' : '+'}${h}${m ? ':' + String(m).padStart(2, '0') : ''}`;
+}
+const nomeDoFuso = fuso => fuso.replace(/_/g, ' ');
+function aplicarTema() {
+  clearTimeout(relogioTema); relogioTema = null;
+  const raiz = document.documentElement;
+  if (!painel?.conta) { delete raiz.dataset.tema; if (corDaBarra) corDaBarra.setAttribute('content', corDaEntrada); return; }
+  const efetivo = temaEmVigor();
+  if (raiz.dataset.tema !== efetivo) raiz.dataset.tema = efetivo;
+  if (corDaBarra) corDaBarra.setAttribute('content', COR_DA_BARRA[efetivo]);
+  // No automático, confere de novo na virada de cada minuto: a troca das 6h e das 18h acontece sem recarregar.
+  // Todo fuso é múltiplo de 15 min, então a virada do minuto é a mesma em qualquer um.
+  if (prefs.tema === 'automatico' || $('#hora-fuso')) relogioTema = setTimeout(() => { aplicarTema(); mostrarHoraDoFuso(); }, 60000 - Date.now() % 60000 + 25);
+}
+function mostrarHoraDoFuso() {
+  const destino = $('#hora-fuso'); if (!destino) return;
+  const fuso = fusoEmVigor(); const {hora, minuto} = horaNoFuso(fuso);
+  const agora = `${String(hora).padStart(2, '0')}:${String(minuto).padStart(2, '0')}`;
+  const proximo = temaEmVigor() === 'diurno' ? 'Fica no diurno até as 18h.' : 'Fica no noturno até as 6h.';
+  destino.textContent = `Agora são ${agora} ${fuso ? `em ${nomeDoFuso(fuso)} (${deslocamento(fuso)})` : `no relógio deste aparelho (${deslocamento('')})`}. ${proximo}`;
+}
+// Fusos do Brasil primeiro; depois todos os que o navegador conhece. A lista completa (perto de 420 fusos, uns 70 ms)
+// entra depois de a tela aparecer e fica guardada para as próximas vezes.
+const FUSOS_DO_BRASIL = ['America/Sao_Paulo', 'America/Noronha', 'America/Bahia', 'America/Fortaleza', 'America/Recife', 'America/Maceio', 'America/Araguaina', 'America/Belem', 'America/Santarem', 'America/Campo_Grande', 'America/Cuiaba', 'America/Porto_Velho', 'America/Boa_Vista', 'America/Manaus', 'America/Eirunepe', 'America/Rio_Branco'];
+const opcaoDeFuso = fuso => `<option value="${escapar(fuso)}">${escapar(nomeDoFuso(fuso))} (${deslocamento(fuso)})</option>`;
+let outrosFusos = null;
+function opcoesDeFuso() {
+  const detectado = fusoDoNavegador();
+  const brasil = FUSOS_DO_BRASIL.filter(fusoValido);
+  const escolhido = prefs.fuso && !brasil.includes(prefs.fuso) ? `<optgroup label="Escolhido">${opcaoDeFuso(prefs.fuso)}</optgroup>` : '';
+  const primeira = `<option value="">${detectado ? `Do navegador: ${escapar(nomeDoFuso(detectado))} (${deslocamento(detectado)})` : `Relógio deste aparelho (${deslocamento('')})`}</option>`;
+  return `${primeira}<optgroup label="Brasil">${brasil.map(opcaoDeFuso).join('')}</optgroup>${escolhido}`;
+}
+function completarFusos(seletor) {
+  if (!seletor?.isConnected || seletor.querySelector('optgroup[data-outros]')) return;
+  if (outrosFusos === null) {
+    let todos = []; try { todos = Intl.supportedValuesOf('timeZone'); } catch { /* navegador antigo: só o Brasil e o UTC */ }
+    outrosFusos = [...new Set([...todos, 'UTC'])].filter(f => !FUSOS_DO_BRASIL.includes(f)).sort().map(opcaoDeFuso).join('');
+  }
+  seletor.insertAdjacentHTML('beforeend', `<optgroup label="Outros fusos" data-outros>${outrosFusos}</optgroup>`);
+  // O fuso escolhido fora do Brasil só sai do grupo próprio se estiver na lista completa (nomes antigos não estão).
+  if ([...seletor.querySelectorAll('optgroup[data-outros] option')].some(o => o.value === prefs.fuso)) $('optgroup[label="Escolhido"]', seletor)?.remove();
+  seletor.value = prefs.fuso;
+}
+document.addEventListener('visibilitychange', () => { if (!document.hidden) { aplicarTema(); mostrarHoraDoFuso(); } });
+
+// ---------- Sons de acerto e erro (Web Audio, sem arquivo de áudio e sem código de terceiros) ----------
+// Tocam só quando a correção aparece na hora, no estudo. O simulado, a revisão do simulado e a questão já corrigida ficam
+// sem som. O contexto de áudio nasce ou é retomado no gesto de responder: o navegador só libera áudio depois de um gesto,
+// e a correção chega segundos depois, pela rede. Navegador sem Web Audio fica em silêncio, sem erro.
+const SONS = {
+  // Cada nota: [frequência em Hz, início em s, duração em s]. Acerto: mi5 e si5, subindo. Erro: ré4 e si3, mais grave e suave.
+  acerto: {forma: 'sine', volume: 0.16, corte: 6000, notas: [[659.25, 0, 0.14], [987.77, 0.08, 0.26]]},
+  erro: {forma: 'triangle', volume: 0.15, corte: 1400, notas: [[293.66, 0, 0.16], [246.94, 0.1, 0.24]]}
+};
+const som = {
+  contexto: null, saida: null,
+  preparar() {
+    if (prefs.sons === false) return;
+    try {
+      const Contexto = window.AudioContext || window.webkitAudioContext; if (!Contexto) return;
+      if (!som.contexto) { som.contexto = new Contexto(); som.saida = som.contexto.createGain(); som.saida.gain.value = 0.7; som.saida.connect(som.contexto.destination); }
+      if (som.contexto.state === 'suspended') som.contexto.resume().catch(() => {});
+    } catch { som.contexto = null; som.saida = null; }
+  },
+  // Desenha o som num contexto qualquer (o do navegador ou um OfflineAudioContext do teste). Devolve quando termina.
+  desenhar(contexto, tipo, destino, inicio) {
+    const {forma, volume, corte, notas} = SONS[tipo];
+    const filtro = contexto.createBiquadFilter(); filtro.type = 'lowpass'; filtro.frequency.value = corte; filtro.connect(destino);
+    let fim = inicio;
+    for (const [frequencia, atraso, duracao] of notas) {
+      const t = inicio + atraso; const oscilador = contexto.createOscillator(); const ganho = contexto.createGain();
+      oscilador.type = forma; oscilador.frequency.setValueAtTime(frequencia, t);
+      ganho.gain.setValueAtTime(0.0001, t); ganho.gain.linearRampToValueAtTime(volume, t + 0.012); ganho.gain.exponentialRampToValueAtTime(0.0001, t + duracao);
+      oscilador.connect(ganho); ganho.connect(filtro); oscilador.start(t); oscilador.stop(t + duracao + 0.01);
+      fim = Math.max(fim, t + duracao + 0.01);
+    }
+    return fim;
+  },
+  tocar(tipo) {
+    if (prefs.sons === false || !SONS[tipo] || !som.contexto) return false;
+    try {
+      if (som.contexto.state === 'suspended') som.contexto.resume().catch(() => {});
+      som.desenhar(som.contexto, tipo, som.saida, som.contexto.currentTime + 0.01);
+      return true;
+    } catch { return false; }
+  }
+};
 
 // ---------- Transporte ----------
 function mensagemErro(e) {
@@ -104,7 +242,7 @@ function encerrarLocal(saida = false) {
   guardarSessao('');
   [CHAVES.painel, CHAVES.questoes].forEach(guarda.apagar);
   if (saida) { simulado = null; guarda.apagar(CHAVES.simulado); enviosSimulado.clear(); }
-  questoes.clear(); imagens.clear(); prefs = {...PREFS_PADRAO};
+  questoes.clear(); imagens.clear(); prefs = {...PREFS_PADRAO}; aplicarTema();
   Object.assign(estado, {modo: 'misturado', primeira: null, puladas: new Set(), feitasSessao: new Set(), marcadas: {}, atual: null, versao: estado.versao + 1});
   if (window.PUSimulador) PUSimulador.limpar();
 }
@@ -582,6 +720,7 @@ ${temImagens ? '<div class="originais"><p id="estado-original" class="secundario
   $('#pular', area).onclick = () => { itens.forEach(item => estado.puladas.add(item.id)); if (estado.primeira === q.id) estado.primeira = null; subir(); abrirProxima(); };
   const enviar = async chute => {
     if (enviando || !completo() || !figurasProntas) return;
+    som.preparar();   // ainda dentro do gesto: a correção chega depois, pela rede
     enviando = true; liberar(); conferir.textContent = 'Conferindo…'; conferir.classList.add('esperando'); retorno.textContent = '';
     enviadas ??= itens.map(item => ({id: item.id, alternativa: marcada(item)}));
     // Depois do primeiro envio a alternativa fica travada: se a resposta chegou ao servidor, o reenvio é o mesmo.
@@ -639,12 +778,14 @@ ${temImagens ? '<div class="originais"><p id="estado-original" class="secundario
     retorno.textContent = '';
     if (conjunto) {
       for (const resultado of resultados) { const item = itens.find(x => x.id === resultado.id); revelar(resultado, item, `<p class="${resultado.acerto ? 'acerto' : 'engano'}"><strong>${resultado.acerto ? 'Certa!' : `Não foi essa. A certa é a ${letra(resultado.correta)}.`}</strong></p>`); }
+      som.tocar(resultados.every(r => r.acerto) ? 'acerto' : 'erro');
       anunciar(`Você acertou ${resultados.filter(r => r.acerto).length} de ${resultados.length} perguntas. A correção está abaixo de cada uma.`);
       seguir(); return mostrar($('.correcao', form));
     }
     const resultado = resultados[0]; const item = itens[0]; const secao = $(`[data-questao="${item.id}"]`, form); const campo = $('fieldset', secao);
     if (resultado.acerto) {
       revelar(resultado, item, `<p class="acerto"><strong>Certa!</strong>${chute ? ' Como foi chute, ela ainda passa pela revisão.' : ''}</p>`);
+      som.tocar('acerto');
       anunciar(chute ? 'Certa! Como foi chute, ela ainda passa pela revisão.' : 'Certa!');
       seguir(); return mostrar($('.correcao', secao));
     }
@@ -655,11 +796,14 @@ ${temImagens ? '<div class="originais"><p id="estado-original" class="secundario
     $$('input', campo).forEach((entrada, i) => { entrada.checked = false; entrada.disabled = i === escolhida; });
     $('.correcao', secao).innerHTML = '<p class="engano"><strong>Não foi essa.</strong> Quer tentar outra antes de ver a resposta? Toque numa alternativa (não muda o seu resultado) ou em Ver resposta.</p>';
     barraAcao.innerHTML = '<button type="button" class="primaria" id="ver-resposta">Ver resposta</button>';
+    som.tocar('erro');
     anunciar('Não foi essa. Escolha outra alternativa para tentar mais uma vez, ou veja a resposta.');
     mostrar($('.correcao', secao)); $('input:not(:disabled)', campo)?.focus({preventScroll: true});
     const fechar = segunda => {
       form.onchange = null;
       const agora = segunda === resultado.correta;
+      // Segunda tentativa: a correção também aparece na hora. "Ver resposta" não toca de novo.
+      if (segunda !== null) som.tocar(agora ? 'acerto' : 'erro');
       revelar(resultado, item, agora ? `<p class="acerto"><strong>Agora sim: é a ${letra(resultado.correta)}.</strong></p>` : `<p class="engano"><strong>${segunda === null ? '' : 'Também não. '}A certa é a ${letra(resultado.correta)}.</strong></p>`);
       $$('input', campo).forEach(entrada => { entrada.checked = false; });
       anunciar(agora ? `Agora sim: é a ${letra(resultado.correta)}.` : `A certa é a ${letra(resultado.correta)}. Ela volta na sua revisão amanhã.`);
@@ -833,6 +977,9 @@ function baixarLembrete(hora) {
 async function verConta() {
   tela(`<h1>Sua conta</h1><p class="lide">${escapar(painel.conta.nome)}</p>
 <h2>Meta do dia</h2><p class="secundario">Quantas questões contam como o dia feito. Comece pequeno: dá para fazer mais quando quiser.</p><div class="modos" role="group" aria-label="Meta diária de questões">${[3, 5, 10, 20].map(n => `<button type="button" class="ficha" data-meta="${n}" aria-pressed="${prefs.meta === n}">${n} questões</button>`).join('')}</div>
+<h2>Tema</h2><p class="secundario">Vale para as telas de estudo neste navegador. No automático, o PU fica diurno, com fundo branco, das 6h às 18h e noturno, com fundo preto, das 18h às 6h.</p><fieldset class="escolha-tema"><legend class="oculto">Tema</legend>${Object.entries(TEMAS).map(([valor, nome]) => `<label class="opcao-tema"><input type="radio" name="tema" value="${valor}"${prefs.tema === valor ? ' checked' : ''}><span>${nome}</span></label>`).join('')}</fieldset>
+<div class="bloco-fuso" id="bloco-fuso"${prefs.tema === 'automatico' ? '' : ' hidden'}><label for="fuso">Fuso horário</label><select id="fuso" aria-describedby="hora-fuso">${opcoesDeFuso()}</select><p class="secundario" id="hora-fuso"></p></div>
+<h2>Sons</h2><p class="secundario">Um som curto quando a correção aparece logo depois de responder, um para acerto e outro para erro. O simulado não tem som.</p><div class="modos"><button type="button" class="ficha" role="switch" id="sons" aria-checked="${prefs.sons !== false}">Sons de acerto e erro</button></div>
 ${publico && !matchMedia('(display-mode: standalone)').matches ? '<h2>PU a um toque</h2><p class="secundario">No celular, abra o menu do navegador e escolha “Adicionar à tela inicial”. O PU vira um ícone e abre direto na questão do dia.</p>' : ''}
 <h2>Lembrete diário</h2><p class="secundario">O PU não envia notificações. Escolha um horário e baixe um evento que se repete todo dia; ao abrir o arquivo, ele entra no calendário do seu celular ou computador, com o aviso na hora marcada.</p><div class="lembrete"><label for="hora-lembrete">Horário</label><input id="hora-lembrete" type="time" value="${escapar(prefs.lembrete || '19:00')}"><button type="button" class="discreto" id="criar-lembrete">Baixar lembrete</button></div>
 <h2>Atalhos do teclado</h2><p class="secundario">No computador, as teclas A a E marcam a alternativa e Enter confere.</p><div class="modos" role="group" aria-label="Atalhos do teclado"><button type="button" class="ficha" id="atalhos" aria-pressed="${prefs.atalhos !== false}">Letras A a E ${prefs.atalhos !== false ? 'ligadas' : 'desligadas'}</button></div>
@@ -840,6 +987,24 @@ ${publico && !matchMedia('(display-mode: standalone)').matches ? '<h2>PU a um to
 <h2>Dados e saída</h2><div class="acoes"><a class="botao discreto" href="#privacidade">Dados e segurança</a><button type="button" class="discreto" id="sair">Sair da conta</button></div>`);
   $$('[data-meta]').forEach(b => b.onclick = () => { prefs.meta = Number(b.dataset.meta); prefs.alvo = null; acertarAlvo(); $$('[data-meta]').forEach(x => x.setAttribute('aria-pressed', String(x === b))); informar(`Meta do dia: ${prefs.meta} questões.`); });
   $('#criar-lembrete').onclick = () => { const hora = $('#hora-lembrete').value; if (!/^\d{2}:\d{2}$/.test(hora)) { informar('Escolha um horário para o lembrete.', true); return; } prefs.lembrete = hora; salvarPrefs(); baixarLembrete(hora); informar(`Lembrete das ${hora} baixado. Abra o arquivo para colocá-lo no calendário.`); };
+  $$('input[name="tema"]').forEach(entrada => entrada.onchange = () => {
+    if (!entrada.checked) return;
+    prefs.tema = entrada.value; salvarPrefs(); aplicarTema();
+    $('#bloco-fuso').hidden = prefs.tema !== 'automatico'; mostrarHoraDoFuso();
+    informar(`Tema: ${TEMAS[prefs.tema]}${prefs.tema === 'automatico' ? `, agora ${temaEmVigor()}` : ''}.`);
+  });
+  $('#fuso').onchange = evento => {
+    prefs.fuso = fusoValido(evento.target.value) ? evento.target.value : ''; salvarPrefs(); aplicarTema(); mostrarHoraDoFuso();
+    informar(`Fuso: ${prefs.fuso ? nomeDoFuso(prefs.fuso) : 'o do navegador'}.`);
+  };
+  $('#fuso').value = prefs.fuso; setTimeout(() => completarFusos($('#fuso')), 0);
+  mostrarHoraDoFuso(); aplicarTema();
+  $('#sons').onclick = evento => {
+    prefs.sons = prefs.sons === false; salvarPrefs(); evento.currentTarget.setAttribute('aria-checked', String(prefs.sons));
+    // Ao ligar, toca o de acerto: serve de amostra e já libera o áudio neste gesto.
+    if (prefs.sons) { som.preparar(); som.tocar('acerto'); }
+    informar(`Sons de acerto e erro ${prefs.sons ? 'ligados' : 'desligados'}.`);
+  };
   $('#atalhos').onclick = evento => { prefs.atalhos = prefs.atalhos === false; salvarPrefs(); evento.currentTarget.setAttribute('aria-pressed', String(prefs.atalhos)); evento.currentTarget.textContent = `Letras A a E ${prefs.atalhos ? 'ligadas' : 'desligadas'}`; };
   $('#sair').onclick = async () => {
     // Mesmo sem rede, o aparelho é limpo: num celular dividido, nada fica para a próxima pessoa.
