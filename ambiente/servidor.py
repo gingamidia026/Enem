@@ -6,7 +6,8 @@ from pathlib import Path
 from http.server import BaseHTTPRequestHandler, HTTPServer
 DADOS=Path('/dados')
 PUBLICO=Path('/site')
-RECURSO=re.compile(r'/(fontes|ilustracoes)/[a-z0-9][a-z0-9-]{0,60}\.(woff2|svg|webp|png)')
+# Mesma expressão de app/servidor.py (RECURSO_ESTATICO) e de gerenciador/servidor.py.
+RECURSO=re.compile(r'/(?:fontes/[a-z0-9][a-z0-9-]{0,60}\.woff2|ilustracoes/[a-z0-9][a-z0-9-]{0,60}\.(?:webp|png))')
 class Site(BaseHTTPRequestHandler):
     def setup(self):
         super().setup();self.connection.settimeout(10)

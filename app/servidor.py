@@ -37,9 +37,11 @@ LIMITE_ORIGEM = max(30, int(os.environ.get('LIMITE_ENTRADAS_ORIGEM', '30')))
 if PRODUCAO and (not SEGURO or PERFIL_TESTE or not ORIGEM.startswith('https://')):
     raise RuntimeError('Produção exige HTTPS, cookie seguro e perfil de teste desligado.')
 PUBLICO = Path(__file__).parent / 'public'
-# Fontes e ilustrações da identidade: nome simples dentro de fontes/ ou ilustracoes/, sem subpasta e sem "..".
-RECURSO_ESTATICO = re.compile(r'/(fontes|ilustracoes)/[a-z0-9][a-z0-9-]{0,60}\.(woff2|svg|webp|png)')
-TIPOS_ESTATICOS = {'woff2': 'font/woff2', 'svg': 'image/svg+xml', 'webp': 'image/webp', 'png': 'image/png'}
+# Fontes (woff2) e ilustrações (webp, png) da identidade: nome simples, sem subpasta e sem "..". SVG fica de fora: no mesmo
+# domínio ele pode levar script. A mesma expressão está em ambiente/servidor.py e gerenciador/servidor.py (processos separados);
+# tests/fluida-navegador.mjs confere que as três são iguais.
+RECURSO_ESTATICO = re.compile(r'/(?:fontes/[a-z0-9][a-z0-9-]{0,60}\.woff2|ilustracoes/[a-z0-9][a-z0-9-]{0,60}\.(?:webp|png))')
+TIPOS_ESTATICOS = {'woff2': 'font/woff2', 'webp': 'image/webp', 'png': 'image/png'}
 INDICE = indice(QUESTOES)
 MAPA = {q['id']: q for q in QUESTOES}
 

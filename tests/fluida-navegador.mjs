@@ -55,7 +55,7 @@ const estatico = http.createServer((pedido, resposta) => {
   const caminho = decodeURIComponent(new URL(pedido.url, URL_PUBLICA).pathname);
   if (caminho === '/configuracao-publica.js') { resposta.writeHead(200, {'Content-Type': 'text/javascript'}); return resposta.end(`window.ENEM_PUBLICO = Object.freeze({habilitado: true, intermediario: '${INTERMEDIARIO}'});`); }
   const arquivo = path.join(RAIZ, caminho === '/' ? 'index.html' : caminho);
-  if (!arquivo.startsWith(RAIZ) || !/^\/(index\.html)?$|^\/app\/public\/(?:(?:fontes|ilustracoes)\/)?[a-z0-9.-]+$|^\/manifest\.webmanifest$|^\/icones\/[a-z0-9.-]+$/.test(caminho) || !fs.existsSync(arquivo)) { resposta.writeHead(404); return resposta.end(); }
+  if (!arquivo.startsWith(RAIZ) || !/^\/(index\.html)?$|^\/app\/public\/(?:(?:fontes|ilustracoes)\/)?[a-z0-9][a-z0-9-]*(?:\.[a-z0-9]+)+$|^\/manifest\.webmanifest$|^\/icones\/[a-z0-9.-]+$/.test(caminho) || !fs.existsSync(arquivo)) { resposta.writeHead(404); return resposta.end(); }
   resposta.writeHead(200, {'Content-Type': {'.html': 'text/html; charset=utf-8', '.js': 'text/javascript', '.css': 'text/css', '.svg': 'image/svg+xml', '.png': 'image/png', '.webp': 'image/webp', '.woff2': 'font/woff2', '.webmanifest': 'application/manifest+json'}[path.extname(arquivo)]});
   // A política de conteúdo da entrada pública aponta para o intermediário real; no teste, para o simulado.
   resposta.end(caminho === '/' ? fs.readFileSync(arquivo, 'utf8').replace('https://enem-ginga-conexao.sabrinaconradoadv.chatgpt.site', INTERMEDIARIO) : fs.readFileSync(arquivo));
@@ -431,19 +431,21 @@ await item('identidade de 14/11: logo da pata no topo, fontes servidas pelo site
   const m = await p.avaliar(`(async () => {
     const svg = document.querySelector('.topo .simbolo svg'); const caminho = svg && svg.querySelector('path');
     const fonte = await fetch('/fontes/pu-texto.woff2');
-    const recusas = await Promise.all(['/fontes/nao-existe.woff2', '/fontes/..%2Fservidor.py', '/fontes/sub/pu-texto.woff2', '/ilustracoes/x.js', '/servidor.py'].map(async u => (await fetch(u)).status));
+    const recusas = await Promise.all(['/fontes/nao-existe.woff2', '/fontes/..%2Fservidor.py', '/fontes/sub/pu-texto.woff2', '/ilustracoes/x.js', '/servidor.py', '/fontes/pu-texto.svg', '/ilustracoes/pu-texto.woff2'].map(async u => (await fetch(u)).status));
     await document.fonts.load('16px "Atkinson Hyperlegible Next"');
     const raiz = getComputedStyle(document.documentElement);
     return {logo: Boolean(caminho) && caminho.getAttribute('fill-rule') === 'evenodd' && caminho.getAttribute('d').startsWith('M256 0a256'),
       largura: Math.round(svg.getBoundingClientRect().width), cor: getComputedStyle(svg).color,
       fonte: [fonte.status, fonte.headers.get('content-type')], recusas,
       carregada: [...document.fonts].some(f => f.family.replace(/"/g, '') === 'Atkinson Hyperlegible Next' && f.status === 'loaded'),
-      variaveis: ['--cor-acerto', '--cor-erro', '--noite-fundo', '--cor-marca'].map(v => raiz.getPropertyValue(v).trim())};
+      variaveis: ['--marca', '--azul-mar', '--roxo-ipe-noite', '--fonte-texto'].map(v => raiz.getPropertyValue(v).trim().split(',')[0])};
   })()`);
   igual(m.logo, true, 'círculo com a pata vazada no topo'); igual(m.largura, 32, 'símbolo de 32 px'); igual(m.cor, 'rgb(0, 0, 0)', 'círculo preto no topo');
-  igual(m.fonte, [200, 'font/woff2'], 'fonte servida pelo próprio site'); igual(m.recusas, [404, 404, 404, 404, 404], 'só nomes simples em fontes/ e ilustracoes/');
+  igual(m.fonte, [200, 'font/woff2'], 'fonte servida pelo próprio site'); igual(m.recusas, [404, 404, 404, 404, 404, 404, 404], 'só nomes simples, woff2 em fontes/ e webp ou png em ilustracoes/');
+  const expressoes = ['app/servidor.py', 'ambiente/servidor.py', 'gerenciador/servidor.py'].map(f => (fs.readFileSync(path.join(RAIZ, f), 'utf8').match(/r'(\/\(\?:fontes\/[^']+)'/) || [])[1]);
+  certo(expressoes[0] && expressoes.every(e => e === expressoes[0]), 'mesma expressão de arquivos estáticos nos três servidores: ' + JSON.stringify(expressoes));
   igual(m.carregada, true, 'fonte carrega com a política de conteúdo');
-  igual(m.variaveis, ['#00695F', '#B3261E', '#000000', '#000000'], 'variáveis de cor da direção nova');
+  igual(m.variaveis, ['#000000', '#2747F5', '#A78BFF', '"Atkinson Hyperlegible Next"'], 'variáveis de cor e de fonte da direção nova');
 });
 
 // ---------- Entrada pública: GitHub Pages + intermediário (simulado dentro do Chrome) ----------
