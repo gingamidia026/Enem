@@ -268,7 +268,16 @@ class API(BaseHTTPRequestHandler):
                     raise Erro(400, 'Informe sua senha.')
                 if not eh_teste and (not re.fullmatch(r'[^\s@]{1,100}@[^\s@]{1,100}\.[^\s@]{2,30}', email) or not 12 <= len(senha) <= 128):
                     raise Erro(400, 'Informe e-mail válido e senha com 12 a 128 caracteres.')
-                self.limitar(con, 'entrada_conta_origem:' + digest(email) + ':' + cliente, 10)
+                # Pela fila pública todos chegam do conector: só a cota por conta e origem deixaria quem sabe o e-mail
+                # travar a dona da conta com 10 senhas erradas. Navegador já autorizado da conta tem cota própria,
+                # que quem não conhece o identificador dele não alcança. Revisão de segurança de 14/11/2026.
+                balde = 'entrada_conta_origem:' + digest(email) + ':' + cliente
+                aparelho = dados.get('dispositivo', '')
+                if isinstance(aparelho, str) and re.fullmatch(r'[A-Za-z0-9_-]{32,100}', aparelho):
+                    dona = con.execute('SELECT id FROM contas WHERE email=?', (email,)).fetchone()
+                    if dona and con.execute('SELECT 1 FROM dispositivos WHERE id=? AND conta=? AND revogado=0', (digest(str(dona['id']) + ':' + aparelho), dona['id'])).fetchone():
+                        balde = 'entrada_conta_dispositivo:' + digest(email) + ':' + digest(aparelho)
+                self.limitar(con, balde, 10)
                 if caminho == '/api/cadastro':
                     nome = dados.get('nome', '')
                     if not isinstance(nome, str):
