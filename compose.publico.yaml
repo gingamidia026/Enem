@@ -1,5 +1,9 @@
 # Acrescenta somente o conector de saída; nunca publica uma porta do PC.
 services:
+  # Pela fila pública todas as pessoas chegam pelo conector: o teto por origem não pode ser o de uma pessoa só.
+  aplicacao:
+    environment:
+      LIMITE_ENTRADAS_ORIGEM: '1200'
   conector:
     build: ./conector
     environment:

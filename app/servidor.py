@@ -30,6 +30,10 @@ PRODUCAO = os.environ.get('PRODUCAO', '0') == '1'
 PROXY_CONFIAVEL = os.environ.get('PROXY_CONFIAVEL', '0') == '1'
 COOKIE = '__Host-sessao' if SEGURO else 'sessao'
 VAGAS_SENHA = threading.BoundedSemaphore(2)
+# Entradas e cadastros por origem em 15 minutos. Pela fila pública todo pedido chega do conector (uma origem só),
+# então o compose.publico.yaml sobe este teto: com 30, uma pessoa insistente bloqueava a entrada de todas as outras.
+# O limite por conta (10) e o do intermediário (60 por minuto por IP) continuam valendo. Revisão de 13/11/2026.
+LIMITE_ORIGEM = max(30, int(os.environ.get('LIMITE_ENTRADAS_ORIGEM', '30')))
 if PRODUCAO and (not SEGURO or PERFIL_TESTE or not ORIGEM.startswith('https://')):
     raise RuntimeError('Produção exige HTTPS, cookie seguro e perfil de teste desligado.')
 PUBLICO = Path(__file__).parent / 'public'
@@ -253,7 +257,7 @@ class API(BaseHTTPRequestHandler):
         with banco() as con:
             if metodo == 'POST' and caminho in ['/api/cadastro', '/api/entrar']:
                 cliente = self.cliente()
-                self.limitar(con, 'entrada_origem:' + cliente, 30)
+                self.limitar(con, 'entrada_origem:' + cliente, LIMITE_ORIGEM)
                 email = dados.get('email', '')
                 if not isinstance(email, str):
                     raise Erro(400, 'Informe um e-mail válido.')
