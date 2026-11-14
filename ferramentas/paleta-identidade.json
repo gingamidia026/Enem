@@ -28,7 +28,8 @@
    "dica-fundo": "#E1F3FE",
    "foco": "#2747F5",
    "destaque": "#111111",
-   "sobre-destaque": "#FFFFFF"
+   "sobre-destaque": "#FFFFFF",
+   "folha": "#FBFBFA"
   },
   "decoracao": [
    "azul-mar",
@@ -205,6 +206,42 @@
     "papel",
     2.0,
     "forma decorativa grande (sem informação)"
+   ],
+   [
+    "papel",
+    "acerto",
+    4.5,
+    "letra branca sobre o acerto"
+   ],
+   [
+    "papel",
+    "erro",
+    4.5,
+    "letra branca sobre o erro"
+   ],
+   [
+    "acerto",
+    "areia",
+    4.5,
+    "acerto na faixa"
+   ],
+   [
+    "erro",
+    "areia",
+    4.5,
+    "erro na faixa"
+   ],
+   [
+    "grafite",
+    "folha",
+    4.5,
+    "texto na folha da questão"
+   ],
+   [
+    "cinza",
+    "folha",
+    4.5,
+    "secundário na folha"
    ]
   ]
  },
@@ -212,11 +249,11 @@
   "cores": {
    "noite": "#000000",
    "superficie": "#141414",
-   "faixa": "#1C1C1A",
-   "texto": "#F2F0EB",
-   "cinza": "#A6A49F",
-   "fio": "#7C7B77",
-   "linha": "#2B2B29",
+   "faixa": "#1C1B19",
+   "texto": "#EDECE9",
+   "cinza": "#ABAAA5",
+   "fio": "#8F8E89",
+   "linha": "#7A7975",
    "tinta": "#000000",
    "papel": "#FFFFFF",
    "azul-mar": "#6E86FF",
@@ -238,8 +275,10 @@
    "dica": "#7CC0F5",
    "dica-fundo": "#0B2236",
    "foco": "#8FA2FF",
-   "destaque": "#F2F0EB",
-   "sobre-destaque": "#000000"
+   "destaque": "#EDECE9",
+   "sobre-destaque": "#000000",
+   "painel": "#111111",
+   "folha": "#0B0B0B"
   },
   "decoracao": [
    "azul-mar",
@@ -404,6 +443,54 @@
     "noite",
     3.0,
     "contorno de controle"
+   ],
+   [
+    "texto",
+    "painel",
+    4.5,
+    "texto em painel"
+   ],
+   [
+    "texto",
+    "folha",
+    4.5,
+    "texto na folha da questão"
+   ],
+   [
+    "cinza",
+    "folha",
+    4.5,
+    "secundário na folha"
+   ],
+   [
+    "acerto",
+    "folha",
+    4.5,
+    "acerto na folha"
+   ],
+   [
+    "erro",
+    "folha",
+    4.5,
+    "erro na folha"
+   ],
+   [
+    "tinta",
+    "acerto",
+    4.5,
+    "letra preta sobre o acerto"
+   ],
+   [
+    "tinta",
+    "erro",
+    4.5,
+    "letra preta sobre o erro"
+   ],
+   [
+    "linha",
+    "noite",
+    3.0,
+    "divisória (não texto)"
    ]
   ]
  }
